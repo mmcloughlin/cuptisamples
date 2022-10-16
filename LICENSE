@@ -1,0 +1,10 @@
+*** LICENSE AGREEMENT ***
+By downloading and using this software you agree to fully comply with the terms and
+conditions of the CUDA EULA (End User License Agreement). The EULA is located
+at EULA.txt. The EULA can also be found at 
+http://docs.nvidia.com/cuda/eula/index.html. If you do not agree to the
+terms and conditions of the EULA, do not use the software.
+
+*** DOCUMENTATION ***
+Note that CUDA documentation is no longer available under doc/. 
+Visit https://docs.nvidia.com/cuda for the latest documentation on CUDA.
