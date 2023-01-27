@@ -2,7 +2,7 @@
 
 set -exuo pipefail
 
-CUDA_REPO="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64"
+CUDA_REPO="https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64"
 
 # Options.
 function usage() {
