@@ -1,5 +1,6 @@
 on:
-  pull_request:
+  schedule:
+    - cron:  '33 2 * * 5'
 name: update
 jobs:
   scrape:
