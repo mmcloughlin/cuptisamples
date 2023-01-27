@@ -257,7 +257,16 @@ static void GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSampling
     }
     g_circularBufferMutex.unlock();
 
-    CUPTI_CALL(cuptiPCSamplingGetData(&pcSamplingGetDataParams));
+    CUptiResult cuptiStatus = cuptiPCSamplingGetData(&pcSamplingGetDataParams);
+    if (cuptiStatus != CUPTI_SUCCESS)
+    {
+        CUpti_PCSamplingData *samplingData = (CUpti_PCSamplingData*)pcSamplingGetDataParams.pcSamplingData;
+        if (samplingData->hardwareBufferFull)
+        {
+            printf("ERROR!! hardware buffer is full, need to increase hardware buffer size or frequency of pc sample data decoding\n");
+            exit(EXIT_FAILURE);
+        }
+    }
 
     if (!g_disableFileDump)
     {

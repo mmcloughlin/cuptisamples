@@ -318,12 +318,12 @@ static void CUPTIAPI
 bufferCompleted(CUcontext ctx, uint32_t streamId, uint8_t *buffer, size_t size, size_t validSize)
 {
   CUpti_Activity *record = NULL;
-  CUpti_ActivityKernel8 *kernel;
+  CUpti_ActivityKernel9 *kernel;
 
   //since we launched only 1 kernel, we should have only 1 kernel record
   CUPTI_CALL(cuptiActivityGetNextRecord(buffer, validSize, &record));
 
-  kernel = (CUpti_ActivityKernel8 *)record;
+  kernel = (CUpti_ActivityKernel9 *)record;
   if (kernel->kind != CUPTI_ACTIVITY_KIND_KERNEL) {
     fprintf(stderr, "Error: expected kernel activity record, got %d\n", (int)kernel->kind);
     exit(EXIT_FAILURE);

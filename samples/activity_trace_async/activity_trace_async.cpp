@@ -200,7 +200,7 @@ printActivity(CUpti_Activity *record)
   case CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL:
     {
       const char* kindString = (record->kind == CUPTI_ACTIVITY_KIND_KERNEL) ? "KERNEL" : "CONC KERNEL";
-      CUpti_ActivityKernel8 *kernel = (CUpti_ActivityKernel8 *) record;
+      CUpti_ActivityKernel9 *kernel = (CUpti_ActivityKernel9 *) record;
       printf("%s \"%s\" [ %llu - %llu ] device %u, context %u, stream %u, correlation %u\n",
              kindString,
              kernel->name,

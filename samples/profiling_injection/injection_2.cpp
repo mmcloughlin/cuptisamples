@@ -414,6 +414,8 @@ void callback(void * userdata, CUpti_CallbackDomain domain, CUpti_CallbackId cbi
 
             RUNTIME_API_CALL(cudaGetDevice(&(data.dev_id)));
 
+            RUNTIME_API_CALL(cudaGetDeviceProperties(&(data.dev_prop), data.dev_id));
+
             // Initialize profiler API and test device compatibility
             initialize_state();
             CUpti_Profiler_DeviceSupported_Params params = { CUpti_Profiler_DeviceSupported_Params_STRUCT_SIZE };

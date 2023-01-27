@@ -87,7 +87,7 @@ storeActivity(CUpti_Activity* record)
         }
         case CUPTI_ACTIVITY_KIND_KERNEL:
         case CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL: {
-            CUpti_ActivityKernel8* kernel = (CUpti_ActivityKernel8*)record;
+            CUpti_ActivityKernel9* kernel = (CUpti_ActivityKernel9*)record;
             correlationMap[kernel->correlationId] = record;
             break;
         }
@@ -169,7 +169,7 @@ printActivity()
             case CUPTI_ACTIVITY_KIND_KERNEL:
             case CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL: {
                 const char* kindString = (iter->second->kind == CUPTI_ACTIVITY_KIND_KERNEL) ? "KERNEL" : "CONC KERNEL";
-                CUpti_ActivityKernel8* kernel = (CUpti_ActivityKernel8*)iter->second;
+                CUpti_ActivityKernel9* kernel = (CUpti_ActivityKernel9*)iter->second;
 
                 // Check whether kernel correlation id is present in connection map
                 if (connectionMap.find(kernel->correlationId) != connectionMap.end())

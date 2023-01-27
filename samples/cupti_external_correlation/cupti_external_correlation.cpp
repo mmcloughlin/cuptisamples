@@ -119,7 +119,7 @@ bufferCompleted(CUcontext ctx, uint32_t streamId, uint8_t *buffer, size_t size, 
                     }
                     case CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL:
                     {
-                        CUpti_ActivityKernel8 *kernel = (CUpti_ActivityKernel8 *)record;
+                        CUpti_ActivityKernel9 *kernel = (CUpti_ActivityKernel9 *)record;
                         printf("CONCURRENT_KERNEL %s: [ %llu - %llu ] device %u, context %u, stream %u, correlation %u\n",
                                 kernel->name,
                                 (unsigned long long) (kernel->start),
