@@ -237,7 +237,7 @@ static void ReadInputParams()
     g_bufferEmptyTrackerArray.resize(g_circularbufCount, false);
 }
 
-static void GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSamplingGetDataParams, ContextInfo *contextInfo)
+static bool GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSamplingGetDataParams, ContextInfo *contextInfo)
 {
     CUpti_PCSamplingData *pPcSamplingData = NULL;
 
@@ -264,7 +264,7 @@ static void GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSampling
         if (samplingData->hardwareBufferFull)
         {
             printf("ERROR!! hardware buffer is full, need to increase hardware buffer size or frequency of pc sample data decoding\n");
-            exit(EXIT_FAILURE);
+            return false;
         }
     }
 
@@ -274,6 +274,7 @@ static void GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSampling
         g_pcSampDataQueue.push(std::make_pair(pPcSamplingData, contextInfo));
         g_pcSampDataQueueMutex.unlock();
     }
+    return true;
 }
 
 static void StorePcSampDataInFile()
@@ -588,7 +589,21 @@ void ConfigureActivity(CUcontext cuCtx)
 void AtExitHandler()
 {
     // Check for any error occured while pc sampling
-    CUPTI_CALL(cuptiGetLastError());
+    CUptiResult cuptiStatus = cuptiGetLastError();
+    if (cuptiStatus != CUPTI_SUCCESS)
+    {
+        const char* errstr;
+        cuptiGetResultString(cuptiStatus, &errstr);
+        printf("%s: %d: error: function cuptiGetLastError() failed with error %s.\n", __FILE__, __LINE__, errstr);
+        g_waitAtJoin = true;
+        if (g_storeDataInFileThreadHandle.joinable())
+        {
+            g_storeDataInFileThreadHandle.join();
+        }
+        FreePreallocatedMemory();
+        exit(EXIT_FAILURE);
+    }
+
     if (g_running)
     {
         g_running = false;
@@ -596,13 +611,36 @@ void AtExitHandler()
         // disable PC sampling to flush remaining data to user's buffer.
         for(auto& itr: g_contextInfoMap)
         {
+            auto GetPcSamplingData = [&](CUpti_PCSamplingGetDataParams &pcSamplingGetDataParams, ContextInfo *contextInfo)
+            {
+                if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextInfo))
+                {
+                    printf("Failed to get pc sampling data from Cupti\n");
+                    g_waitAtJoin = true;
+                    if (g_storeDataInFileThreadHandle.joinable())
+                    {
+                        g_storeDataInFileThreadHandle.join();
+                    }
+                    FreePreallocatedMemory();
+                    exit(EXIT_FAILURE);
+                }
+            };
+
             CUpti_PCSamplingGetDataParams pcSamplingGetDataParams = {};
             pcSamplingGetDataParams.size = CUpti_PCSamplingGetDataParamsSize;
             pcSamplingGetDataParams.ctx = itr.first;
 
+            // For the case where hawdware buffer is full, remainingNumPc field from pcSamplingData will be 0.
+            // Call GetPcSamplingDataFromCupti() function which calls cuptiPcSamplingGetData() API 
+            // which reports CUPTI_ERROR_OUT_OF_MEMORY for this case.
+            if (itr.second->pcSamplingData.remainingNumPcs == 0)
+            {
+                GetPcSamplingData(pcSamplingGetDataParams, itr.second);
+            }
+
             while (itr.second->pcSamplingData.remainingNumPcs > 0 || itr.second->pcSamplingData.totalNumPcs > 0)
             {
-                GetPcSamplingDataFromCupti(pcSamplingGetDataParams, itr.second);
+                GetPcSamplingData(pcSamplingGetDataParams, itr.second);
             }
 
             CUpti_PCSamplingDisableParams pcSamplingDisableParams = {};
@@ -766,12 +804,20 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                             // collect all records filled in provided buffer during configuration.
                             while (contextStateMapItr->second->pcSamplingData.totalNumPcs > 0)
                             {
-                                GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second);
+                                if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
+                                {
+                                    printf("Failed to get pc sampling data from Cupti\n");
+                                    exit(EXIT_FAILURE);
+                                }
                             }
                             // collect if any extra records which could not accommodated in provided buffer during configuration.
                             while (contextStateMapItr->second->pcSamplingData.remainingNumPcs > 0)
                             {
-                                GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second);
+                                if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
+                                {
+                                    printf("Failed to get pc sampling data from Cupti\n");
+                                    exit(EXIT_FAILURE);
+                                }
                             }
                         }
                         else if(contextStateMapItr->second->pcSamplingData.remainingNumPcs >= g_circularbufSize)
@@ -780,7 +826,11 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                             pcSamplingGetDataParams.size = CUpti_PCSamplingGetDataParamsSize;
                             pcSamplingGetDataParams.ctx = cbInfo->context;
 
-                            GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second);
+                            if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
+                            {
+                                printf("Failed to get pc sampling data from Cupti\n");
+                                exit(EXIT_FAILURE);
+                            }
                         }
                     }
                 }
@@ -846,9 +896,25 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                     pcSamplingGetDataParams.size = CUpti_PCSamplingGetDataParamsSize;
                     pcSamplingGetDataParams.ctx = itr->first;
 
+                    // For the case where hawdware buffer is full, remainingNumPc field from pcSamplingData will be 0.
+                    // Call GetPcSamplingDataFromCupti() function which calls cuptiPcSamplingGetData() API 
+                    // which reports CUPTI_ERROR_OUT_OF_MEMORY for this case.
+                    if (itr->second->pcSamplingData.remainingNumPcs == 0)
+                    {
+                        if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, itr->second))
+                        {
+                            printf("Failed to get pc sampling data from Cupti\n");
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+
                     while (itr->second->pcSamplingData.remainingNumPcs > 0 || itr->second->pcSamplingData.totalNumPcs > 0)
                     {
-                        GetPcSamplingDataFromCupti(pcSamplingGetDataParams, itr->second);
+                        if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, itr->second))
+                        {
+                            printf("Failed to get pc sampling data from Cupti\n");
+                            exit(EXIT_FAILURE);
+                        }
                     }
 
                     CUpti_PCSamplingDisableParams pcSamplingDisableParams = {};
@@ -891,12 +957,20 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                     // collect all records filled in provided buffer during configuration.
                     while (contextStateMapItr->second->pcSamplingData.totalNumPcs > 0)
                     {
-                        GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second);
+                        if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
+                        {
+                            printf("Failed to get pc sampling data from Cupti\n");
+                            exit(EXIT_FAILURE);
+                        }
                     }
                     // collect if any extra records which could not accommodated in provided buffer during configuration.
                     while (contextStateMapItr->second->pcSamplingData.remainingNumPcs > 0)
                     {
-                        GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second);
+                        if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
+                        {
+                            printf("Failed to get pc sampling data from Cupti\n");
+                            exit(EXIT_FAILURE);
+                        }
                     }
                 }
                 break;
