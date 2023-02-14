@@ -1,4 +1,5 @@
 on:
+  workflow_dispatch:
   schedule:
     - cron:  '33 2 * * 5'
 name: update
