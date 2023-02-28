@@ -1,17 +1,19 @@
 on:
   workflow_dispatch:
   schedule:
-    - cron:  '33 2 * * 5'
+    - cron:  '33 2 */3 * *'
 name: update
 jobs:
   scrape:
     name: update
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+    - name: Checkout
+      uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
     - name: Update
       run: ./script/update.sh
-    - uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a # v4.16.0
+    - name: Commit
+      uses: stefanzweifel/git-auto-commit-action@3ea6ae190baf489ba007f7c92608f33ce20ef04a # v4.16.0
       with:
         commit_message: "all: update to latest"
         commit_author: "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
