@@ -8,7 +8,7 @@ endif
 
 CUDA_INSTALL_PATH ?= ../../../..
 NVCC := "$(CUDA_INSTALL_PATH)/bin/nvcc"
-INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include
+INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I../common
 
 TARGET_ARCH ?= $(HOST_ARCH)
 TARGET_OS ?= $(shell uname | tr A-Z a-z)
@@ -76,17 +76,14 @@ SMS ?= 50 52 53 60 61 62 70 72 75 80 86 87 89 90
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
-cupti_correlation: cupti_correlation.$(OBJ) vec.$(OBJ)
+cupti_correlation: cupti_correlation.$(OBJ)
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ $^ $(LIBS) $(INCLUDES)
 
-cupti_correlation.$(OBJ): cupti_correlation.cpp
-	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -c $(INCLUDES) $<
-
-vec.$(OBJ): vec.cu
+cupti_correlation.$(OBJ): cupti_correlation.cu
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(GENCODE_FLAGS) -c $(INCLUDES) $<
 
 run: cupti_correlation
 	./$<
 
 clean:
-	rm -f  cupti_correlation cupti_correlation.$(OBJ) vec.$(OBJ)
+	rm -f  cupti_correlation cupti_correlation.$(OBJ)

@@ -6,28 +6,13 @@ Build this sample with
 
 make CUDA_INSTALL_PATH=/path/to/cuda
 
-This x86 linux-only sample contains 4 build targets:
+This x86 linux-only sample contains 3 build targets:
 
-libinjection_1.so
-    * Minimal injection sample code showing how to write an injection library using
-      either LD_PRELOAD to perform dlsym() interception, or CUDA's injection support with
-      CUDA_INJECTION64_PATH.
+libinjection.so
     * When CUDA_INJECTION64_PATH is set to a shared library, at initialization, CUDA
       will load the shared object and call the function named 'InitializeInjection'.
-    * When LD_PRELOAD is set to a shared library, its symbols will be preferrentially
-      used to resolve dynamic linking.  When an application dynamically links in the
-      dlsym() call, this version of dlsym() is provided instead of the default system
-      version.  In this case, dlsym() is used to call CUPTI initialization code, then
-      call an internal name for the system dlsym(), ensuring that the original functionality
-      of dlsym() is preserved.
-    *** While this sample shows potential use of LD_PRELOAD, CUPTI does not currently
-      recommend using this means of injecting a tool into a process - CUPTI's initialization
-      may run before other objects are constructed, causing potential undefined behavior.
-      For this reason we only recommend using CUDA_INJECTION64_PATH to guarantee
-      correct behavior. ***
-
-libinjection_2.so
-    * Expands on the injection_1 sample to add CUPTI Callback and Profiler API calls
+      At this point it is valid to call CUPTI routines to register Callbacks, enable
+      Activity tracing, etc.
     * Registers callbacks for cuLaunchKernel and context creation.  This will be
       sufficient for many target applications, but others may require other launches
       to be matched, eg cuLaunchCoooperativeKernel or cuLaunchGrid.  See the Callback
@@ -42,6 +27,16 @@ libinjection_2.so
       completed a pass) print their data.
     * This library links in the profilerHostUtils library which may be built from the
       cuda/extras/CUPTI/samples/extensions/src/profilerhost_util/ directory
+    * The sample uses the following environment variables:
+        ** INJECTION_KERNEL_COUNT: Since injection doesn't know how many kernels a target
+                application may run, it must pick a number of kernels to run in a single
+                session, and once this many kernels run, it ends the session and restarts.
+                This sets the number of kernels in a session, defaulting to 10.
+        ** INJECTION_METRICS: This sets the metrics to gather, separated by space, comma,
+                or semicolon.  Default metrics are:
+                    sm__cycles_elapsed.avg
+                    smsp__sass_thread_inst_executed_op_dadd_pred_on.avg
+                    smsp__sass_thread_inst_executed_op_dfma_pred_on.avg
 
 simple_target
     * Very simple executable which calls a kernel several times with increasing amount
@@ -55,4 +50,4 @@ complex_target
 To use the injection library, set CUDA_INJECTION64_PATH to point to that library
 when you launch the target application:
 
-env CUDA_INJECTION64_PATH=./libinjection_2.so ./simple_target
+env CUDA_INJECTION64_PATH=./libinjection.so ./simple_target

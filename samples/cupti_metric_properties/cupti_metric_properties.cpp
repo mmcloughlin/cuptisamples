@@ -1,4 +1,4 @@
-// Copyright 2020 NVIDIA Corporation. All rights reserved
+// Copyright 2020-2022 NVIDIA Corporation. All rights reserved
 //
 // The sample provides the generic workflow for querying various properties of metrics which are available as part of
 // the Profiling APIs. In this particular case we are querying for number of passes and collection method for a list of metrics.
@@ -12,59 +12,39 @@
 // any other metrics in the same pass as otherwise instrumented code will also contribute to the metric value.
 //
 
-
+// System headers
 #include <stdio.h>
-#include <vector>
+#include <stdlib.h>
 #include <string>
 #include <cstring>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#include <vector>
+
+// CUPTI headers
+#include <cupti_profiler_target.h>
+#include <cupti_target.h>
+#include "helper_cupti.h"
+
+// NVPW headers
+#include <nvperf_host.h>
+#include <nvperf_cuda_host.h>
+
 #include <Parser.h>
 #include <Utils.h>
 #include <List.h>
-#include <nvperf_host.h>
-#include <nvperf_cuda_host.h>
-#include <cupti_profiler_target.h>
-#include <cupti_target.h>
-#include <stdlib.h>
 
-#ifndef EXIT_WAIVED
-#define EXIT_WAIVED 2
-#endif
-
-#define DRIVER_API_CALL(apiFuncCall)                                           \
-do {                                                                           \
-    CUresult _status = apiFuncCall;                                            \
-    if (_status != CUDA_SUCCESS) {                                             \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %d.\n",   \
-                __FILE__, __LINE__, #apiFuncCall, _status);                    \
-        exit(EXIT_FAILURE);                                                    \
-    }                                                                          \
-} while (0)
-
-#define CUPTI_API_CALL(apiFuncCall)                                            \
-do {                                                                           \
-    CUptiResult _status = apiFuncCall;                                         \
-    const char *errstr;                                                        \
-    cuptiGetResultString(_status, &errstr);                                    \
-    if (_status != CUPTI_SUCCESS) {                                            \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",   \
-                __FILE__, __LINE__, #apiFuncCall, errstr);                     \
-        exit(EXIT_FAILURE);                                                    \
-    }                                                                          \
-} while (0)
-
-#define FORMAT_METRIC_DETAILS(stream, metricName, numOfPasses, collectionMethod, isCSVformat)   \
-    if(isCSVformat) {                                                                           \
-        stream  << metricName  << ","                                                           \
-                << numOfPasses << ","                                                           \
-                << collectionMethod << "\n";                                                    \
-    } else {                                                                                    \
-        stream  << std::setw(80) << std::left << metricName  << "\t"                            \
-                << std::setw(15) << std::left << numOfPasses << "\t"                            \
-                << std::setw(15) << std::left << collectionMethod << "\n";                      \
+#define FORMAT_METRIC_DETAILS(stream, metricName, numOfPasses, collectionMethod, isCSVformat)           \
+    if(isCSVformat) {                                                                                   \
+        stream  << metricName  << ","                                                                   \
+                << numOfPasses << ","                                                                   \
+                << collectionMethod << "\n";                                                            \
+    } else {                                                                                            \
+        stream  << std::setw(80) << std::left << metricName  << "\t"                                    \
+                << std::setw(15) << std::left << numOfPasses << "\t"                                    \
+                << std::setw(15) << std::left << collectionMethod << "\n";                              \
     }
 
 #define PRINT_METRIC_DETAILS(stream, outputStream, isCSVformat)                                         \
@@ -76,20 +56,25 @@ do {                                                                           \
     }                                                                                                   \
 }
 
-std::string GetMetricCollectionMethod(std::string metricName)
+std::string
+GetMetricCollectionMethod(
+    std::string metricName)
 {
     const std::string SW_CHECK = "sass";
     if (metricName.find(SW_CHECK) != std::string::npos)
     {
         return "SW";
     }
+
     return "HW";
 }
 
-bool GetRawMetricRequests(  std::string chipName,
-                            std::string metricName,
-                            std::vector<NVPA_RawMetricRequest>& rawMetricRequests,
-                            const uint8_t* pCounterAvailabilityImage)
+bool
+GetRawMetricRequests(
+    std::string chipName,
+    std::string metricName,
+    std::vector<NVPA_RawMetricRequest>& rawMetricRequests,
+    const uint8_t *pCounterAvailabilityImage)
 {
     std::string reqName;
     bool isolated = true;
@@ -150,28 +135,33 @@ bool GetRawMetricRequests(  std::string chipName,
     NVPW_MetricsEvaluator_Destroy_Params metricEvaluatorDestroyParams = { NVPW_MetricsEvaluator_Destroy_Params_STRUCT_SIZE };
     metricEvaluatorDestroyParams.pMetricsEvaluator = metricEvaluator;
     RETURN_IF_NVPW_ERROR(false, NVPW_MetricsEvaluator_Destroy(&metricEvaluatorDestroyParams));
+
     return true;
 }
 
 
-bool GetMetricDetails(std::string pMetricName,
-    std::string pChipName,
-    std::stringstream& pOutputStream,
-    const uint8_t* pCounterAvailabilityImage)
+bool
+GetMetricDetails(
+    std::string metricName,
+    std::string chipName,
+    std::stringstream& outputStream,
+    const uint8_t *pCounterAvailabilityImage)
 {
     std::vector<NVPA_RawMetricRequest> rawMetricRequests;
-    if (!GetRawMetricRequests(pChipName, pMetricName, rawMetricRequests, pCounterAvailabilityImage)) {
-        printf("Error!! Failed to get raw metrics\n");
+    if (!GetRawMetricRequests(chipName, metricName, rawMetricRequests, pCounterAvailabilityImage))
+    {
+        printf("Error: Failed to get raw metrics.\n");
+
         return false;
     }
 
     NVPW_CUDA_RawMetricsConfig_Create_V2_Params rawMetricsConfigCreateParams = { NVPW_CUDA_RawMetricsConfig_Create_V2_Params_STRUCT_SIZE };
     rawMetricsConfigCreateParams.activityKind = NVPA_ACTIVITY_KIND_PROFILER;
-    rawMetricsConfigCreateParams.pChipName = pChipName.c_str();
+    rawMetricsConfigCreateParams.pChipName = chipName.c_str();
     rawMetricsConfigCreateParams.pCounterAvailabilityImage = pCounterAvailabilityImage;
     RETURN_IF_NVPW_ERROR(false, NVPW_CUDA_RawMetricsConfig_Create_V2(&rawMetricsConfigCreateParams));
 
-    NVPA_RawMetricsConfig* pRawMetricsConfig = rawMetricsConfigCreateParams.pRawMetricsConfig;
+    NVPA_RawMetricsConfig *pRawMetricsConfig = rawMetricsConfigCreateParams.pRawMetricsConfig;
     NVPW_RawMetricsConfig_BeginPassGroup_Params beginPassGroupParams = { NVPW_RawMetricsConfig_BeginPassGroup_Params_STRUCT_SIZE };
     beginPassGroupParams.pRawMetricsConfig = pRawMetricsConfig;
     RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_BeginPassGroup(&beginPassGroupParams));
@@ -202,20 +192,21 @@ bool GetMetricDetails(std::string pMetricName,
     size_t numIsolatedPasses = rawMetricsConfigGetNumPassesParams.numIsolatedPasses;
     size_t numPipelinedPasses = rawMetricsConfigGetNumPassesParams.numPipelinedPasses;
     size_t numOfPasses = numPipelinedPasses + numIsolatedPasses * numNestingLevels;
-    std::string collectionMethod = GetMetricCollectionMethod(pMetricName);
+    std::string collectionMethod = GetMetricCollectionMethod(metricName);
 
     NVPW_RawMetricsConfig_Destroy_Params rawMetricsConfigDestroyParams = { NVPW_RawMetricsConfig_Destroy_Params_STRUCT_SIZE };
     rawMetricsConfigDestroyParams.pRawMetricsConfig = pRawMetricsConfig;
     RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_Destroy((NVPW_RawMetricsConfig_Destroy_Params*)&rawMetricsConfigDestroyParams));
 
-    pOutputStream << pMetricName << " "
-                  << numOfPasses << " "
-                  << collectionMethod << "\n";
+    outputStream << metricName << " " << numOfPasses << " " << collectionMethod << "\n";
 
     return true;
 }
 
-int main(int argc, char* argv[])
+int
+main(
+    int argc,
+    char *argv[])
 {
     std::vector<std::string> metricNames;
     int deviceCount;
@@ -228,7 +219,7 @@ int main(int argc, char* argv[])
 
     for (int i = 1; i < argc; ++i)
     {
-        char* arg = argv[i];
+        char *arg = argv[i];
         if (strcmp(arg, "--help") == 0)
         {
             printf("Usage: %s --device [device_num] --chip [chip name] --metrics [metric_names comma separated] --csv --file [filename]\n", argv[0]);
@@ -351,6 +342,11 @@ int main(int argc, char* argv[])
             if (params.cmp == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
             {
                 ::std::cerr << "\tNVIDIA Crypto Mining Processors (CMP) are not supported" << ::std::endl;
+            }
+
+            if (params.wsl == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+            {
+                ::std::cerr << "\tWSL is not supported" << ::std::endl;
             }
             exit(EXIT_WAIVED);
         }

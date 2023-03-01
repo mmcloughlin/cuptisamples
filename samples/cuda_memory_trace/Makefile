@@ -8,7 +8,7 @@ endif
 
 CUDA_INSTALL_PATH ?= ../../../..
 NVCC := "$(CUDA_INSTALL_PATH)/bin/nvcc"
-INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include
+INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I../common
 
 TARGET_ARCH ?= $(HOST_ARCH)
 TARGET_OS ?= $(shell uname | tr A-Z a-z)
@@ -76,11 +76,8 @@ SMS ?= 50 52 53 60 61 62 70 72 75 80 86 87 89 90
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
-cuda_memory_trace: cuda_memory_trace.$(OBJ) memory_trace.$(OBJ)
+cuda_memory_trace: memory_trace.$(OBJ)
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ $^ $(LIBS) $(INCLUDES)
-
-cuda_memory_trace.$(OBJ): cuda_memory_trace.cpp
-	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -c $(INCLUDES) $<
 
 memory_trace.$(OBJ): memory_trace.cu
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(GENCODE_FLAGS) -c $(INCLUDES) $<
@@ -89,4 +86,4 @@ run: cuda_memory_trace
 	./$<
 
 clean:
-	rm -f cuda_memory_trace cuda_memory_trace.$(OBJ) memory_trace.$(OBJ)
+	rm -f cuda_memory_trace memory_trace.$(OBJ)

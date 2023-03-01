@@ -5,65 +5,21 @@
  * with start stop APIs. This app will work on devices with compute
  * capability 7.0 and higher.
  */
-#include <cuda.h>
-#include <cupti_pcsampling.h>
-#include <cupti_profiler_target.h>
+
+// System headers
 #include <stdio.h>
+#include <stdlib.h>
 #include <iostream>
 #include <vector>
 #include <unordered_set>
-#include <stdlib.h>
 
-#ifndef EXIT_WAIVED
-#define EXIT_WAIVED 2
-#endif
+// CUDA headers
+#include <cuda.h>
 
-#if defined(WIN32) || defined(_WIN32)
-#define stricmp _stricmp
-#else
-#define stricmp strcasecmp
-#endif
-
-#define RUNTIME_API_CALL(apiFuncCall)                                           \
-do {                                                                            \
-    cudaError_t _status = apiFuncCall;                                          \
-    if (_status != cudaSuccess) {                                               \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",    \
-                __FILE__, __LINE__, #apiFuncCall, cudaGetErrorString(_status)); \
-        exit(EXIT_FAILURE);                                                      \
-    }                                                                           \
-} while (0)
-
-#define DRIVER_API_CALL(apiFuncCall)                                            \
-do {                                                                            \
-    CUresult _status = apiFuncCall;                                             \
-    if (_status != CUDA_SUCCESS) {                                              \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %d.\n",    \
-                __FILE__, __LINE__, #apiFuncCall, _status);                     \
-        exit(EXIT_FAILURE);                                                     \
-    }                                                                           \
-} while (0)
-
-#define CUPTI_CALL(call)                                                        \
-do {                                                                            \
-    CUptiResult _status = call;                                                 \
-    if (_status != CUPTI_SUCCESS) {                                             \
-        const char *errstr;                                                     \
-        cuptiGetResultString(_status, &errstr);                                 \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",    \
-                __FILE__, __LINE__, #call, errstr);                             \
-        exit(EXIT_FAILURE);                                                      \
-    }                                                                           \
-} while (0)
-
-#define MEMORY_ALLOCATION_CALL(var)                                             \
-do {                                                                            \
-    if (var == NULL) {                                                          \
-        fprintf(stderr, "%s:%d: Error: Memory Allocation Failed \n",            \
-                __FILE__, __LINE__);                                            \
-        exit(EXIT_FAILURE);                                                     \
-    }                                                                           \
-} while (0)
+// CUPTI headers
+#include "helper_cupti.h"
+#include <cupti_pcsampling.h>
+#include <cupti_profiler_target.h>
 
 #define NUM_PC_COLLECT 100
 #define ARRAY_SIZE 32000
@@ -74,167 +30,221 @@ typedef enum
     VECTOR_ADD  = 0,
     VECTOR_SUB  = 1,
     VECTOR_MUL  = 2,
-} vectorOp;
+} VectorOperation;
 
-// CUDA device kernels
-__global__ void VecAdd(const int* A, const int* B, int* C, int N)
+/// Kernels
+__global__ void
+VectorAdd(
+    const int *pA,
+    const int *pB,
+    int *pC,
+    int N)
 {
     int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < N)
     {
-        C[i] = A[i] + B[i];
+        pC[i] = pA[i] + pB[i];
     }
 }
 
-__global__ void VecSub(const int* A, const int* B, int* C, int N)
+__global__ void
+VectorSubtract(
+    const int *pA,
+    const int *pB,
+    int *pC,
+    int N)
 {
     int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < N)
     {
-        C[i] = A[i] - B[i];
+        pC[i] = pA[i] - pB[i];
     }
 }
 
-__global__ void VecMul(const int* A, const int* B, int* C, int N)
+__global__ void
+VectorMultiply(
+    const int *pA,
+    const int *pB,
+    int *pC,
+    int N)
 {
     int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < N)
     {
-        C[i] = A[i] * B[i];
+        pC[i] = pA[i] * pB[i];
     }
 }
 
-static void cleanUp(int *h_A, int *h_B, int *h_C, int *d_A, int *d_B, int *d_C)
+static void
+CleanUp(
+    int *pHostA,
+    int *pHostB,
+    int *pHostC,
+    int *pDeviceA,
+    int *pDeviceB,
+    int *pDeviceC)
 {
-    // Free device memory
-    if (d_A)
-        RUNTIME_API_CALL(cudaFree(d_A));
-    if (d_B)
-        RUNTIME_API_CALL(cudaFree(d_B));
-    if (d_C)
-        RUNTIME_API_CALL(cudaFree(d_C));
 
-    // Free host memory
-    if (h_A)
-        free(h_A);
-    if (h_B)
-        free(h_B);
-    if (h_C)
-        free(h_C);
-}
-
-static void initVec(int *vec, int n)
-{
-    for (int i = 0; i < n; i++)
+    // Free host memory.
+    if (pHostA)
     {
-        vec[i] = i;
+        free(pHostA);
+    }
+    if (pHostB)
+    {
+        free(pHostB);
+    }
+    if (pHostC)
+    {
+        free(pHostC);
+    }
+
+    // Free device memory.
+    if (pDeviceA)
+    {
+        cudaFree(pDeviceA);
+    }
+    if (pDeviceB)
+    {
+        cudaFree(pDeviceB);
+    }
+    if (pDeviceC)
+    {
+        cudaFree(pDeviceC);
     }
 }
 
-static void vectorOperation(const vectorOp op)
+static void
+InitializeVector(
+    int *pVector,
+    int N)
+{
+    for (int i = 0; i < N; i++)
+    {
+        pVector[i] = i;
+    }
+}
+
+static void
+DoVectorOperation(
+    const VectorOperation vectorOperation)
 {
     int N = ARRAY_SIZE;
-    int threads_per_block = THREADS_PER_BLOCK;
+    int threadsPerBlock = THREADS_PER_BLOCK;
     int blocksPerGrid = 0;
-    int *h_A, *h_B, *h_C;
-    int *d_A, *d_B, *d_C;
+    int *pHostA, *pHostB, *pHostC;
+    int *pDeviceA, *pDeviceB, *pDeviceC;
     size_t size = N * sizeof(int);
     int i, result = 0;
 
     CUcontext cuCtx;
 
-    // Allocate input vectors h_A and h_B in host memory
-    h_A = (int*)malloc(size);
-    MEMORY_ALLOCATION_CALL(h_A);
-    h_B = (int*)malloc(size);
-    MEMORY_ALLOCATION_CALL(h_B);
-    h_C = (int*)malloc(size);
-    MEMORY_ALLOCATION_CALL(h_C);
+    // Allocate input vectors pHostA and pHostB in host memory.
+    pHostA = (int *)malloc(size);
+    MEMORY_ALLOCATION_CALL(pHostA);
 
-    // Initialize input vectors
-    initVec(h_A, N);
-    initVec(h_B, N);
-    memset(h_C, 0, size);
+    pHostB = (int *)malloc(size);
+    MEMORY_ALLOCATION_CALL(pHostB);
 
-    // Allocate vectors in device memory
-    RUNTIME_API_CALL(cudaMalloc((void**)&d_A, size));
-    RUNTIME_API_CALL(cudaMalloc((void**)&d_B, size));
-    RUNTIME_API_CALL(cudaMalloc((void**)&d_C, size));
+    pHostC = (int *)malloc(size);
+    MEMORY_ALLOCATION_CALL(pHostC);
+
+    // Initialize input vectors.
+    InitializeVector(pHostA, N);
+    InitializeVector(pHostB, N);
+    memset(pHostC, 0, size);
+
+    // Allocate vectors in device memory.
+    RUNTIME_API_CALL(cudaMalloc((void **)&pDeviceA, size));
+    RUNTIME_API_CALL(cudaMalloc((void **)&pDeviceB, size));
+    RUNTIME_API_CALL(cudaMalloc((void **)&pDeviceC, size));
 
     cuCtxGetCurrent(&cuCtx);
 
-    RUNTIME_API_CALL(cudaMemcpyAsync(d_A, h_A, size, cudaMemcpyHostToDevice));
-    RUNTIME_API_CALL(cudaMemcpyAsync(d_B, h_B, size, cudaMemcpyHostToDevice));
+    RUNTIME_API_CALL(cudaMemcpyAsync(pDeviceA, pHostA, size, cudaMemcpyHostToDevice));
+    RUNTIME_API_CALL(cudaMemcpyAsync(pDeviceB, pHostB, size, cudaMemcpyHostToDevice));
 
-    blocksPerGrid = (N + threads_per_block - 1) / threads_per_block;
+    blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
 
-    if (op == VECTOR_ADD)
+    if (vectorOperation == VECTOR_ADD)
     {
-        printf("Launching VecAdd\n");
-        VecAdd<<<blocksPerGrid, threads_per_block>>>(d_A, d_B, d_C, N);
+        printf("Launching VectorAdd\n");
+        VectorAdd <<< blocksPerGrid, threadsPerBlock >>> (pDeviceA, pDeviceB, pDeviceC, N);
     }
-    else if (op == VECTOR_SUB)
+    else if (vectorOperation == VECTOR_SUB)
     {
-        printf("Launching VecSub\n");
-        VecSub<<<blocksPerGrid, threads_per_block>>>(d_A, d_B, d_C, N);
+        printf("Launching VectorSubtract\n");
+        VectorSubtract <<< blocksPerGrid, threadsPerBlock >>> (pDeviceA, pDeviceB, pDeviceC, N);
     }
-    else if (op == VECTOR_MUL)
+    else if (vectorOperation == VECTOR_MUL)
     {
-        printf("Launching VecMul\n");
-        VecMul<<<blocksPerGrid, threads_per_block>>>(d_A, d_B, d_C, N);
+        printf("Launching VectorMultiply\n");
+        VectorMultiply <<< blocksPerGrid, threadsPerBlock >>> (pDeviceA, pDeviceB, pDeviceC, N);
     }
     else
     {
-        fprintf(stderr, "error: invalid operation\n");
+        fprintf(stderr, "Error: invalid operation\n");
         exit(EXIT_FAILURE);
     }
 
-    RUNTIME_API_CALL(cudaMemcpyAsync(h_C, d_C, size, cudaMemcpyDeviceToHost));
+    RUNTIME_API_CALL(cudaMemcpyAsync(pHostC, pDeviceC, size, cudaMemcpyDeviceToHost));
     RUNTIME_API_CALL(cudaDeviceSynchronize());
 
     // Verify result
     for (i = 0; i < N; ++i)
     {
-        if (op == VECTOR_ADD)
+        if (vectorOperation == VECTOR_ADD)
         {
-            result = h_A[i] + h_B[i];
+            result = pHostA[i] + pHostB[i];
         }
-        else if (op == VECTOR_SUB)
+        else if (vectorOperation == VECTOR_SUB)
         {
-            result = h_A[i] - h_B[i];
+            result = pHostA[i] - pHostB[i];
         }
-        else if (op == VECTOR_MUL)
+        else if (vectorOperation == VECTOR_MUL)
         {
-            result = h_A[i] * h_B[i];
+            result = pHostA[i] * pHostB[i];
         }
         else
         {
-            fprintf(stderr, "error: invalid operation\n");
+            fprintf(stderr, "Error: Invalid operation.\n");
             exit(EXIT_FAILURE);
         }
 
-        if (h_C[i] != result)
+        if (pHostC[i] != result)
         {
-            fprintf(stderr, "error: result verification failed\n");
+            fprintf(stderr, "Error: Result verification failed.\n");
             exit(EXIT_FAILURE);
         }
     }
-    cleanUp(h_A, h_B, h_C, d_A, d_B, d_C);
+
+    CleanUp(pHostA, pHostB, pHostC, pDeviceA, pDeviceB, pDeviceC);
 }
 
-inline const char * getStallReason(const uint32_t& stallReasonCount, const uint32_t& pcSamplingStallReasonIndex, uint32_t *pStallReasonIndex, char **pStallReasons)
+inline const char *
+GetStallReason(
+    const uint32_t& stallReasonCount,
+    const uint32_t& pcSamplingStallReasonIndex,
+    uint32_t *pStallReasonIndex,
+    char **ppStallReasons)
 {
     for (uint32_t i = 0; i < stallReasonCount; i++)
     {
         if (pStallReasonIndex[i] == pcSamplingStallReasonIndex)
         {
-            return pStallReasons[i];
+            return ppStallReasons[i];
         }
     }
+
     return "ERROR_STALL_REASON_INDEX_NOT_FOUND";
 }
 
-void printPCSamplingData(CUpti_PCSamplingData *pPcSamplingData, const uint32_t& stallReasonCount, uint32_t *pStallReasonIndex, char **pStallReasons)
+void
+PrintPCSamplingData(
+    CUpti_PCSamplingData *pPcSamplingData,
+    const uint32_t& stallReasonCount,
+    uint32_t *pStallReasonIndex,
+    char **ppStallReasons)
 {
     std::cout << "----- PC sampling data for range defined by cuptiPCSamplingStart() and cuptiPCSamplingStop() -----" << std::endl;
     for (size_t i = 0; i < pPcSamplingData->totalNumPcs; i++)
@@ -244,11 +254,12 @@ void printPCSamplingData(CUpti_PCSamplingData *pPcSamplingData, const uint32_t& 
                   << ", functionName: " << pPcSamplingData->pPcData[i].functionName;
         for (size_t j = 0; j < pPcSamplingData->pPcData[i].stallReasonCount; j++)
         {
-            std::cout << ", stallReason: " << getStallReason(stallReasonCount, pPcSamplingData->pPcData[i].stallReason[j].pcSamplingStallReasonIndex, pStallReasonIndex, pStallReasons)
+            std::cout << ", stallReason: " << GetStallReason(stallReasonCount, pPcSamplingData->pPcData[i].stallReason[j].pcSamplingStallReasonIndex, pStallReasonIndex, ppStallReasons)
                       << ", samples: " << pPcSamplingData->pPcData[i].stallReason[j].samples;
         }
         std::cout << std::endl;
     }
+
     std::cout << "Number of PCs remaining to be collected: " << pPcSamplingData->remainingNumPcs << ", ";
     std::cout << "range id: " << pPcSamplingData->rangeId << ", ";
     std::cout << "total samples: " << pPcSamplingData->totalSamples << ", ";
@@ -257,7 +268,12 @@ void printPCSamplingData(CUpti_PCSamplingData *pPcSamplingData, const uint32_t& 
     std::cout << "--------------------------------------------------------------------------------------------------" << std::endl;
 }
 
-bool run(const CUcontext& cuCtx, const size_t& stallReasonCount, uint32_t *pStallReasonIndex, char **pStallReasons)
+bool
+Run(
+    const CUcontext& cuCtx,
+    const size_t& stallReasonCount,
+    uint32_t *pStallReasonIndex,
+    char **ppStallReasons)
 {
     CUpti_PCSamplingStartParams pcSamplingStartParams = {};
     pcSamplingStartParams.size = CUpti_PCSamplingStartParamsSize;
@@ -285,42 +301,42 @@ bool run(const CUcontext& cuCtx, const size_t& stallReasonCount, uint32_t *pStal
     pcSamplingGetDataParams.pcSamplingData = (void *)&pcSamplingData;
 
     // Kernel outside PC Sampling data collection range
-    vectorOperation(VECTOR_MUL);
+    DoVectorOperation(VECTOR_MUL);
 
     // Start PC Sampling
     std::cout << "----- PC sampling start -----" << std::endl;
-    CUPTI_CALL(cuptiPCSamplingStart(&pcSamplingStartParams));
-    vectorOperation(VECTOR_ADD);
-    vectorOperation(VECTOR_SUB);
+    CUPTI_API_CALL(cuptiPCSamplingStart(&pcSamplingStartParams));
+    DoVectorOperation(VECTOR_ADD);
+    DoVectorOperation(VECTOR_SUB);
 
     // Stop PC Sampling
-    CUPTI_CALL(cuptiPCSamplingStop(&pcSamplingStopParams));
+    CUPTI_API_CALL(cuptiPCSamplingStop(&pcSamplingStopParams));
     std::cout << "----- PC sampling stop -----" << std::endl;
 
     // Collect PC Sampling data
-    CUPTI_CALL(cuptiPCSamplingGetData(&pcSamplingGetDataParams));
-    printPCSamplingData(&pcSamplingData, stallReasonCount, pStallReasonIndex, pStallReasons);
+    CUPTI_API_CALL(cuptiPCSamplingGetData(&pcSamplingGetDataParams));
+    PrintPCSamplingData(&pcSamplingData, stallReasonCount, pStallReasonIndex, ppStallReasons);
 
     // Kernel outside PC Sampling data collection range
-    vectorOperation(VECTOR_MUL);
+    DoVectorOperation(VECTOR_MUL);
 
     // Start PC Sampling
     std::cout << "----- PC sampling start -----" << std::endl;
-    CUPTI_CALL(cuptiPCSamplingStart(&pcSamplingStartParams));
-    vectorOperation(VECTOR_MUL);
-    vectorOperation(VECTOR_ADD);
-    vectorOperation(VECTOR_SUB);
+    CUPTI_API_CALL(cuptiPCSamplingStart(&pcSamplingStartParams));
+    DoVectorOperation(VECTOR_MUL);
+    DoVectorOperation(VECTOR_ADD);
+    DoVectorOperation(VECTOR_SUB);
 
     // Stop PC Sampling
-    CUPTI_CALL(cuptiPCSamplingStop(&pcSamplingStopParams));
+    CUPTI_API_CALL(cuptiPCSamplingStop(&pcSamplingStopParams));
     std::cout << "----- PC sampling stop -----" << std::endl;
 
     // Collect PC Sampling data
-    CUPTI_CALL(cuptiPCSamplingGetData(&pcSamplingGetDataParams));
-    printPCSamplingData(&pcSamplingData, stallReasonCount, pStallReasonIndex, pStallReasons);
+    CUPTI_API_CALL(cuptiPCSamplingGetData(&pcSamplingGetDataParams));
+    PrintPCSamplingData(&pcSamplingData, stallReasonCount, pStallReasonIndex, ppStallReasons);
 
     // Kernel outside PC Sampling data collection range
-    vectorOperation(VECTOR_MUL);
+    DoVectorOperation(VECTOR_MUL);
 
     // Free memory
     std::unordered_set<char*> functions;
@@ -330,7 +346,7 @@ bool run(const CUcontext& cuCtx, const size_t& stallReasonCount, uint32_t *pStal
         {
             free(pcSamplingData.pPcData[i].stallReason);
         }
-        
+
         if (pcSamplingData.pPcData[i].functionName)
         {
             functions.insert(pcSamplingData.pPcData[i].functionName);
@@ -350,13 +366,15 @@ bool run(const CUcontext& cuCtx, const size_t& stallReasonCount, uint32_t *pStal
     return true;
 }
 
-void doPCSampling(const CUcontext& cuCtx)
+void
+DoPCSampling(
+    const CUcontext& cuCtx)
 {
     // Enable PC Sampling
     CUpti_PCSamplingEnableParams pcSamplingEnableParams = {};
     pcSamplingEnableParams.size = CUpti_PCSamplingEnableParamsSize;
     pcSamplingEnableParams.ctx = cuCtx;
-    CUPTI_CALL(cuptiPCSamplingEnable(&pcSamplingEnableParams));
+    CUPTI_API_CALL(cuptiPCSamplingEnable(&pcSamplingEnableParams));
 
     // Get number of supported counters
     size_t numStallReasons = 0;
@@ -364,14 +382,14 @@ void doPCSampling(const CUcontext& cuCtx)
     numStallReasonsParams.size = CUpti_PCSamplingGetNumStallReasonsParamsSize;
     numStallReasonsParams.ctx = cuCtx;
     numStallReasonsParams.numStallReasons = &numStallReasons;
-    CUPTI_CALL(cuptiPCSamplingGetNumStallReasons(&numStallReasonsParams));
+    CUPTI_API_CALL(cuptiPCSamplingGetNumStallReasons(&numStallReasonsParams));
 
-    char **pStallReasons = (char **)calloc(numStallReasons, sizeof(char*));
-    MEMORY_ALLOCATION_CALL(pStallReasons);
+    char **ppStallReasons = (char **)calloc(numStallReasons, sizeof(char*));
+    MEMORY_ALLOCATION_CALL(ppStallReasons);
     for (size_t i = 0; i < numStallReasons; i++)
     {
-        pStallReasons[i] = (char *)calloc(CUPTI_STALL_REASON_STRING_SIZE, sizeof(char));
-        MEMORY_ALLOCATION_CALL(pStallReasons[i]);
+        ppStallReasons[i] = (char *)calloc(CUPTI_STALL_REASON_STRING_SIZE, sizeof(char));
+        MEMORY_ALLOCATION_CALL(ppStallReasons[i]);
     }
     uint32_t *pStallReasonIndex = (uint32_t *)calloc(numStallReasons, sizeof(uint32_t));
     MEMORY_ALLOCATION_CALL(pStallReasonIndex);
@@ -381,8 +399,8 @@ void doPCSampling(const CUcontext& cuCtx)
     stallReasonsParams.ctx = cuCtx;
     stallReasonsParams.numStallReasons = numStallReasons;
     stallReasonsParams.stallReasonIndex = pStallReasonIndex;
-    stallReasonsParams.stallReasons = pStallReasons;
-    CUPTI_CALL(cuptiPCSamplingGetStallReasons(&stallReasonsParams));
+    stallReasonsParams.stallReasons = ppStallReasons;
+    CUPTI_API_CALL(cuptiPCSamplingGetStallReasons(&stallReasonsParams));
 
     // Buffer to hold collected PC Sampling data in PC-To-Counter format
     CUpti_PCSamplingData pcSamplingData;
@@ -415,9 +433,9 @@ void doPCSampling(const CUcontext& cuCtx)
     pcSamplingConfigurationInfoParams.numAttributes = pcSamplingConfigurationInfo.size();
     pcSamplingConfigurationInfoParams.pPCSamplingConfigurationInfo = pcSamplingConfigurationInfo.data();
 
-    CUPTI_CALL(cuptiPCSamplingSetConfigurationAttribute(&pcSamplingConfigurationInfoParams));
+    CUPTI_API_CALL(cuptiPCSamplingSetConfigurationAttribute(&pcSamplingConfigurationInfoParams));
 
-    if(!run(cuCtx, numStallReasons, pStallReasonIndex, pStallReasons))
+    if(!Run(cuCtx, numStallReasons, pStallReasonIndex, ppStallReasons))
     {
         std::cout << "Failed to run sample" << std::endl;
         exit(EXIT_FAILURE);
@@ -427,7 +445,7 @@ void doPCSampling(const CUcontext& cuCtx)
     CUpti_PCSamplingDisableParams pcSamplingDisableParams = {};
     pcSamplingDisableParams.size = CUpti_PCSamplingDisableParamsSize;
     pcSamplingDisableParams.ctx = cuCtx;
-    CUPTI_CALL(cuptiPCSamplingDisable(&pcSamplingDisableParams));
+    CUPTI_API_CALL(cuptiPCSamplingDisable(&pcSamplingDisableParams));
 
     // Free memory
     for (size_t i = 0; i < pcSamplingData.collectNumPcs; i++)
@@ -444,18 +462,21 @@ void doPCSampling(const CUcontext& cuCtx)
 
     for (size_t i = 0; i < numStallReasons; i++)
     {
-        if (pStallReasons[i])
+        if (ppStallReasons[i])
         {
-            free(pStallReasons[i]);
+            free(ppStallReasons[i]);
         }
     }
-    if (pStallReasons)
+    if (ppStallReasons)
     {
-        free(pStallReasons);
+        free(ppStallReasons);
     }
 }
 
-int main(int argc, char *argv[])
+int
+main(
+    int argc,
+    char *argv[])
 {
     CUcontext cuCtx;
     cudaDeviceProp prop;
@@ -469,10 +490,10 @@ int main(int argc, char *argv[])
 
     // Initialize profiler API and test device compatibility
     CUpti_Profiler_Initialize_Params profilerInitializeParams = { CUpti_Profiler_Initialize_Params_STRUCT_SIZE };
-    CUPTI_CALL(cuptiProfilerInitialize(&profilerInitializeParams));
+    CUPTI_API_CALL(cuptiProfilerInitialize(&profilerInitializeParams));
     CUpti_Profiler_DeviceSupported_Params params = { CUpti_Profiler_DeviceSupported_Params_STRUCT_SIZE };
     params.cuDevice = deviceNum;
-    CUPTI_CALL(cuptiProfilerDeviceSupported(&params));
+    CUPTI_API_CALL(cuptiProfilerDeviceSupported(&params));
 
     if (params.isSupported != CUPTI_PROFILER_CONFIGURATION_SUPPORTED)
     {
@@ -501,12 +522,19 @@ int main(int argc, char *argv[])
         {
             ::std::cerr << "\tdevice confidential compute configuration is not supported" << ::std::endl;
         }
+
+        if (params.wsl == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tWSL is not supported" << ::std::endl;
+        }
         exit(EXIT_WAIVED);
     }
 
     cuCtxGetCurrent(&cuCtx);
     DRIVER_API_CALL(cuCtxCreate(&cuCtx, 0, deviceNum));
-    doPCSampling(cuCtx);
+
+    DoPCSampling(cuCtx);
+
     DRIVER_API_CALL(cuCtxDestroy(cuCtx));
 
     exit(EXIT_SUCCESS);

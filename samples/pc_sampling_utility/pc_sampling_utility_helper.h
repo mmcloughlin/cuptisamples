@@ -1,73 +1,26 @@
 #if !defined(_PC_SAMPLING_UTILITY_HELPER_H_)
 #define _PC_SAMPLING_UTILITY_HELPER_H_
 
-#include <cupti_pcsampling_util.h>
-#include <cupti_pcsampling.h>
+// System headers
 #include <iostream>
 #include <fstream>
+#include <stdlib.h>
 #include <string>
 #include <vector>
 #include <map>
 #include <string.h>
-#include <stdlib.h>
+
+// CUPTI headers
+#include <cupti_pcsampling_util.h>
+#include <cupti_pcsampling.h>
+#include "helper_cupti.h"
 
 using namespace CUPTI::PcSamplingUtil;
 
-#ifndef EXIT_WAIVED
-#define EXIT_WAIVED 2
-#endif
-
-#if defined(WIN32) || defined(_WIN32)
-#define stricmp _stricmp
-#else
-#define stricmp strcasecmp
-#endif
-
-#ifndef CUPTI_CALL
-#define CUPTI_CALL(call)                                                    \
-{                                                                           \
- CUptiResult _status = call;                                                \
- if (_status != CUPTI_SUCCESS)                                              \
-    {                                                                       \
-     const char* errstr;                                                    \
-     cuptiGetResultString(_status, &errstr);                                \
-     fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",   \
-             __FILE__,                                                      \
-             __LINE__,                                                      \
-             #call,                                                         \
-             errstr);                                                       \
-     exit(EXIT_FAILURE);                                                    \
-    }                                                                       \
-}
-#endif
-
-#define CUPTI_UTIL_CALL(call)                                               \
-{                                                                           \
- CUptiUtilResult _status = call;                                            \
- if (_status != CUPTI_UTIL_SUCCESS)                                         \
-    {                                                                       \
-     fprintf(stderr, "%s:%d: error: function %s failed with error %d.\n",   \
-             __FILE__,                                                      \
-             __LINE__,                                                      \
-             #call,                                                         \
-             _status);                                                      \
-     exit(EXIT_FAILURE);                                                    \
-    }                                                                       \
-}
-
-#define MEMORY_ALLOCATION_CALL(var)                                         \
-do {                                                                        \
-    if (var == NULL)                                                        \
-    {                                                                       \
-        fprintf(stderr, "%s:%d: Error: Memory Allocation Failed \n",        \
-                __FILE__, __LINE__);                                        \
-        exit(EXIT_FAILURE);                                                 \
-    }                                                                       \
-} while (0)
-
-typedef struct moduleDetails {
+typedef struct ModuleDetails_st
+{
     uint32_t cubinSize;
-    void* cubinImage;
+    void *pCubinImage;
 } ModuleDetails;
 
 std::string fileName;
@@ -77,11 +30,12 @@ std::map<uint64_t, ModuleDetails> crcModuleMap;
 CUpti_PCSamplingCollectionMode collectionMode;
 
 bool disableMerge;
-bool disablePcInfoPrints ;
+bool disablePcInfoPrints;
 bool disableSourceCorrelation;
 bool verbose;
 
-static void Init()
+static void
+Init()
 {
     fileName = "";
     pcSamplingStallReasonsRetrieve = {};
@@ -93,20 +47,24 @@ static void Init()
     verbose = false;
 }
 
-static void PrintUsage()
+static void
+PrintUsage()
 {
-    printf("usage: pc_sampling_utility\n");
-    printf("       --help                            : displays help message\n");
-    printf("       --file-name                       : Name of the file to parse and print data\n");
-    printf("       --disable-merge                   : Disable merge of buffers\n");
-    printf("       --disable-pc-info-prints          : Disable PC records info prints\n");
-    printf("       --disable-source-correlation      : Disable Source correlation\n");
-    printf("       --verbose                         : Enable verbose prints\n");
+    printf("Usage: pc_sampling_utility\n");
+    printf("       --help                            : Displays help message.\n");
+    printf("       --file-name                       : Name of the file to parse and print data.\n");
+    printf("       --disable-merge                   : Disable merge of buffers.\n");
+    printf("       --disable-pc-info-prints          : Disable PC records info prints.\n");
+    printf("       --disable-source-correlation      : Disable Source correlation.\n");
+    printf("       --verbose                         : Enable verbose prints.\n");
 
     exit(EXIT_SUCCESS);
 }
 
-static void ParseCommandLineArgs(int argc, char *argv[])
+static void
+ParseCommandLineArgs(
+    int argc,
+    char *argv[])
 {
     if (argc < 2)
     {
@@ -114,15 +72,17 @@ static void ParseCommandLineArgs(int argc, char *argv[])
         PrintUsage();
     }
 
-    for (int i=1; i<argc; i++)
+    for (int i = 1; i < argc; i++)
     {
-        if ((stricmp(argv[i], "--help") == 0) || (stricmp(argv[i], "-help") == 0))
+        if ((stricmp(argv[i], "--help") == 0) ||
+            (stricmp(argv[i], "-help") == 0))
         {
             PrintUsage();
         }
-        else if ((stricmp(argv[i], "--file-name") == 0) || (stricmp(argv[i], "-file-name") == 0))
+        else if ((stricmp(argv[i], "--file-name") == 0) ||
+                (stricmp(argv[i], "-file-name") == 0))
         {
-            if (argc < i+2)
+            if (argc < i + 2)
             {
                 std::cout << "ERROR : Pass file to parse." << std::endl;
                 PrintUsage();
@@ -130,25 +90,29 @@ static void ParseCommandLineArgs(int argc, char *argv[])
             fileName = argv[i+1];
             i++;
         }
-        else if ((stricmp(argv[i], "--disable-merge") == 0) ||(stricmp(argv[i], "-disable-merge") == 0))
+        else if ((stricmp(argv[i], "--disable-merge") == 0) ||
+                (stricmp(argv[i], "-disable-merge") == 0))
         {
             disableMerge = true;
         }
-        else if ((stricmp(argv[i], "--disable-pc-info-prints") == 0) ||(stricmp(argv[i], "-disable-pc-info-prints") == 0))
+        else if ((stricmp(argv[i], "--disable-pc-info-prints") == 0) ||
+                (stricmp(argv[i], "-disable-pc-info-prints") == 0))
         {
             disablePcInfoPrints = true;
         }
-        else if ((stricmp(argv[i], "--disable-source-correlation") == 0) ||(stricmp(argv[i], "-disable-source-correlation") == 0))
+        else if ((stricmp(argv[i], "--disable-source-correlation") == 0) ||
+                (stricmp(argv[i], "-disable-source-correlation") == 0))
         {
             disableSourceCorrelation = true;
         }
-        else if ((stricmp(argv[i], "--verbose") == 0) ||(stricmp(argv[i], "-verbose") == 0))
+        else if ((stricmp(argv[i], "--verbose") == 0) ||
+                (stricmp(argv[i], "-verbose") == 0))
         {
             verbose = true;
         }
         else
         {
-            std::cout << "Unknown option : " << argv[i] << std::endl;
+            std::cout << "Unknown option: " << argv[i] << std::endl;
             PrintUsage();
         }
 
@@ -159,7 +123,9 @@ static void ParseCommandLineArgs(int argc, char *argv[])
  * Function Info :
  * Store stall reasons as per vector index for ease of access
  */
-static std::string GetStallReason(uint32_t pcSamplingStallReasonIndex)
+static std::string
+GetStallReason(
+    uint32_t pcSamplingStallReasonIndex)
 {
     for (size_t i = 0; i < pcSamplingStallReasonsRetrieve.numStallReasons; i++)
     {
@@ -168,10 +134,13 @@ static std::string GetStallReason(uint32_t pcSamplingStallReasonIndex)
             return pcSamplingStallReasonsRetrieve.stallReasons[i];
         }
     }
+
     return "ERROR_STALL_REASON_INDEX_NOT_FOUND";
 }
 
-static void PrintConfigurationDetails(CUptiUtil_GetPcSampDataParams &getPcSampDataParams)
+static void
+PrintConfigurationDetails(
+    CUptiUtil_GetPcSampDataParams &getPcSampDataParams)
 {
     std::cout << "========================== Configuration info ==========================" << std::endl;
 
@@ -214,10 +183,12 @@ static void PrintConfigurationDetails(CUptiUtil_GetPcSampDataParams &getPcSampDa
                 break;
         }
     }
+
     std::cout << "========================================================================" << std::endl;
 }
 
-static void PrintRetrievedPcSampData()
+static void
+PrintRetrievedPcSampData()
 {
     for (size_t pcSampBufferIndex = 0; pcSampBufferIndex < buffersRetrievedDataVector.size(); pcSampBufferIndex++)
     {
@@ -227,6 +198,7 @@ static void PrintRetrievedPcSampData()
                   << ", Count of PC records: " << buffersRetrievedDataVector[pcSampBufferIndex].totalNumPcs
                   << ", Total Samples: " << buffersRetrievedDataVector[pcSampBufferIndex].totalSamples
                   << ", Total Dropped Samples: " << buffersRetrievedDataVector[pcSampBufferIndex].droppedSamples;
+
         if (CHECK_PC_SAMPLING_STRUCT_FIELD_EXISTS(CUpti_PCSamplingData, nonUsrKernelsTotalSamples, buffersRetrievedDataVector[pcSampBufferIndex].size))
         {
             std::cout << ", Non User Kernels Total Samples: " << buffersRetrievedDataVector[pcSampBufferIndex].nonUsrKernelsTotalSamples;
@@ -260,7 +232,8 @@ static void PrintRetrievedPcSampData()
  *    Allocate memory for PC samp data buffers
  *    Retrieve PC samp data using CuptiUtilGetPcSampData() CUPTI UTIL API
  */
-static void RetrievePcSampData()
+static void
+RetrievePcSampData()
 {
     std::ifstream fileHandler(fileName, std::ios::out | std::ios::binary);
 
@@ -281,7 +254,7 @@ static void RetrievePcSampData()
         std::cout << "Total buffers available in file " << fileName << ": " << getHeaderDataParams.headerInfo.totalBuffers << std::endl;
     }
 
-    for(size_t i=0; i<getHeaderDataParams.headerInfo.totalBuffers ; i++)
+    for (size_t i = 0; i < getHeaderDataParams.headerInfo.totalBuffers; i++)
     {
         CUptiUtil_GetBufferInfoParams getBufferInfoParams = {};
         getBufferInfoParams.size = CUptiUtil_GetBufferInfoParamsSize;
@@ -358,7 +331,7 @@ static void RetrievePcSampData()
 
             CUPTI_UTIL_CALL(CuptiUtilGetPcSampData(&getPcSampDataParams));
 
-            for (size_t i=0; i<getPcSampDataParams.numAttributes; i++)
+            for (size_t i = 0; i < getPcSampDataParams.numAttributes; i++)
             {
                 if (getPcSampDataParams.pPCSamplingConfigurationInfo[i].attributeType == CUPTI_PC_SAMPLING_CONFIGURATION_ATTR_TYPE_COLLECTION_MODE)
                 {
@@ -400,7 +373,8 @@ static void RetrievePcSampData()
  * compute hash on module using cuptiGetCubinCrc() CUPTI API.
  * and store it in map for every Cubin.
  */
-static void FillCrcModuleMap()
+static void
+FillCrcModuleMap()
 {
     for(int i = 1 ;; i++)
     {
@@ -422,10 +396,10 @@ static void FillCrcModuleMap()
             exit(EXIT_FAILURE);
         }
 
-        moduleDetailsStruct.cubinImage = malloc(sizeof(char) * moduleDetailsStruct.cubinSize);
-        MEMORY_ALLOCATION_CALL(moduleDetailsStruct.cubinImage);
+        moduleDetailsStruct.pCubinImage = malloc(sizeof(char) * moduleDetailsStruct.cubinSize);
+        MEMORY_ALLOCATION_CALL(moduleDetailsStruct.pCubinImage);
 
-        fileHandler.read((char*)moduleDetailsStruct.cubinImage, moduleDetailsStruct.cubinSize);
+        fileHandler.read((char*)moduleDetailsStruct.pCubinImage, moduleDetailsStruct.cubinSize);
 
         fileHandler.close();
 
@@ -438,9 +412,9 @@ static void FillCrcModuleMap()
         CUpti_GetCubinCrcParams cubinCrcParams = {0};
         cubinCrcParams.size = CUpti_GetCubinCrcParamsSize;
         cubinCrcParams.cubinSize = moduleDetailsStruct.cubinSize;
-        cubinCrcParams.cubin = moduleDetailsStruct.cubinImage;
+        cubinCrcParams.cubin = moduleDetailsStruct.pCubinImage;
 
-        CUPTI_CALL(cuptiGetCubinCrc(&cubinCrcParams));
+        CUPTI_API_CALL(cuptiGetCubinCrc(&cubinCrcParams));
 
         uint64_t cubinCrc = cubinCrcParams.cubinCrc;
         crcModuleMap.insert(std::make_pair(cubinCrc, moduleDetailsStruct));
@@ -456,7 +430,10 @@ static void FillCrcModuleMap()
  * Function Info :
  * Merge all retrieved buffer using CuptiUtilMergePcSampData() CUPTI UTIL API.
  */
-static void MergePcSampDataBuffers(CUpti_PCSamplingData **mergedPcSampDataBuffer, size_t& numMergedPcSampDataBuffer)
+static void
+MergePcSampDataBuffers(
+    CUpti_PCSamplingData **mergedPcSampDataBuffer,
+    size_t& numMergedPcSampDataBuffer)
 {
     CUptiUtil_MergePcSampDataParams mergePcSampDataParams = {};
     mergePcSampDataParams.size = CUptiUtil_MergePcSampDataParamsSize;
@@ -480,7 +457,10 @@ static void MergePcSampDataBuffers(CUpti_PCSamplingData **mergedPcSampDataBuffer
  *         Find Cubin in which PC belongs using cubin crc.
  *         Do source correlation using cuptiGetSassToSourceCorrelation() CUPTI API.
  */
-static void SourceCorrelation(CUpti_PCSamplingData *pPcSampDataBuffer, size_t numPcSampDataBuffer)
+static void
+SourceCorrelation(
+    CUpti_PCSamplingData *pPcSampDataBuffer,
+    size_t numPcSampDataBuffer)
 {
     std::map<uint64_t, ModuleDetails>::iterator itr;
     size_t numPcNoCubin = 0;
@@ -502,7 +482,7 @@ static void SourceCorrelation(CUpti_PCSamplingData *pPcSampDataBuffer, size_t nu
 
 
 
-        for(size_t i=0 ; i < pPcSampDataBuffer[pcSampBufferIndex].totalNumPcs; i++)
+        for(size_t i = 0 ; i < pPcSampDataBuffer[pcSampBufferIndex].totalNumPcs; i++)
         {
             // find matching cubinCrc entry in map
             itr = crcModuleMap.find(pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].cubinCrc);
@@ -543,7 +523,7 @@ static void SourceCorrelation(CUpti_PCSamplingData *pPcSampDataBuffer, size_t nu
             pCSamplingGetSassToSourceCorrelationParams.size = CUpti_GetSassToSourceCorrelationParamsSize;
             pCSamplingGetSassToSourceCorrelationParams.functionName = pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].functionName;
             pCSamplingGetSassToSourceCorrelationParams.pcOffset = pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].pcOffset;
-            pCSamplingGetSassToSourceCorrelationParams.cubin = itr->second.cubinImage;
+            pCSamplingGetSassToSourceCorrelationParams.cubin = itr->second.pCubinImage;
             pCSamplingGetSassToSourceCorrelationParams.cubinSize = itr->second.cubinSize;
 
             CUptiResult cuptiResult = cuptiGetSassToSourceCorrelation(&pCSamplingGetSassToSourceCorrelationParams);
@@ -591,7 +571,8 @@ static void SourceCorrelation(CUpti_PCSamplingData *pPcSampDataBuffer, size_t nu
     }
 }
 
-static void FreePcSampStallReasonsMemory()
+static void
+FreePcSampStallReasonsMemory()
 {
     for (size_t i = 0; i < pcSamplingStallReasonsRetrieve.numStallReasons; i++)
     {
@@ -601,7 +582,8 @@ static void FreePcSampStallReasonsMemory()
     free(pcSamplingStallReasonsRetrieve.stallReasonIndex);
 }
 
-static void FreePcSampDataBuffers(CUpti_PCSamplingData *pcSampData, size_t numBuffers)
+static void
+FreePcSampDataBuffers(CUpti_PCSamplingData *pcSampData, size_t numBuffers)
 {
     for (size_t i=0; i<numBuffers; i++)
     {
@@ -614,11 +596,12 @@ static void FreePcSampDataBuffers(CUpti_PCSamplingData *pcSampData, size_t numBu
     }
 }
 
-static void FreeCrcModuleMapMemory()
+static void
+FreeCrcModuleMapMemory()
 {
     for (auto itr = crcModuleMap.begin(); itr != crcModuleMap.end(); itr++)
     {
-        free(itr->second.cubinImage);
+        free(itr->second.pCubinImage);
     }
 }
 

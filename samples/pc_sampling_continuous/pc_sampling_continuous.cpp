@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 NVIDIA Corporation. All rights reserved
+ * Copyright 2020-2022 NVIDIA Corporation. All rights reserved
  *
  * Sample CUPTI app to demonstrate the usage of pc sampling APIs.
  * This app will work on devices with compute capability 7.0 and higher.
@@ -51,23 +51,19 @@
  *        It got joined to the main thread in AtExitHandler.
  */
 
-#include <inttypes.h>
-#include <stdint.h>
+// System headers
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <string>
+#include <stdint.h>
 #include <iostream>
+#include <string>
 #include <vector>
-#include <map>
+#include <inttypes.h>
 #include <unordered_set>
+#include <mutex>
+#include <map>
 #include <queue>
 #include <thread>
-#include <mutex>
-
-#ifndef EXIT_WAIVED
-#define EXIT_WAIVED 2
-#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -77,41 +73,21 @@
 #include <pthread.h>
 #endif
 
+// CUDA headers
+#include <cuda.h>
+
+// CUPTI headers
 #include <cupti_pcsampling_util.h>
 #include <cupti_pcsampling.h>
-#include "cupti.h"
-#include "cuda.h"
-
+#include "helper_cupti.h"
+#include <cupti.h>
 using namespace CUPTI::PcSamplingUtil;
 
-#define CUPTI_CALL(call)                                                    \
-{                                                                           \
- CUptiResult _status = call;                                                \
- if (_status != CUPTI_SUCCESS)                                              \
-    {                                                                       \
-     const char* errstr;                                                    \
-     cuptiGetResultString(_status, &errstr);                                \
-     fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",   \
-             __FILE__,                                                      \
-             __LINE__,                                                      \
-             #call,                                                         \
-             errstr);                                                       \
-     exit(EXIT_FAILURE);                                                    \
-    }                                                                       \
-}
-
-#define MEMORY_ALLOCATION_CALL(var)                                             \
-do {                                                                            \
-    if (var == NULL) {                                                          \
-        fprintf(stderr, "%s:%d: Error: Memory Allocation Failed \n",            \
-                __FILE__, __LINE__);                                            \
-        exit(EXIT_FAILURE);                                                     \
-    }                                                                           \
-} while (0)
-
+// Macros
 #define THREAD_SLEEP_TIME 100 // in ms
 
-typedef struct contextInfo
+// Global structures and variables
+typedef struct ContextInfo_st
 {
     uint32_t contextUid;
     CUpti_PCSamplingData pcSamplingData;
@@ -120,9 +96,9 @@ typedef struct contextInfo
 } ContextInfo;
 
 // For multi-gpu we are preallocating buffers only for first context creation,
-// so preallocated buffer stall reason size will be equal to max stall reason for first context GPU
+// So preallocated buffer stall reason size will be equal to max stall reason for first context GPU.
 size_t stallReasonsCount = 0;
-// consider firstly queried stall reason count using cuptiPCSamplingGetNumStallReasons() to allocate memory for circular buffers.
+// Consider firstly queried stall reason count using cuptiPCSamplingGetNumStallReasons() to allocate memory for circular buffers.
 bool g_collectedStallReasonsCount = false;
 std::mutex g_stallReasonsCountMutex;
 
@@ -137,14 +113,14 @@ bool g_buffersGetUtilisedFasterThanStore = false;
 bool g_allocatedCircularBuffers = false;
 
 // Variables related to context info book keeping.
-std::map<CUcontext, ContextInfo*> g_contextInfoMap;
+std::map<CUcontext, ContextInfo *> g_contextInfoMap;
 std::mutex g_contextInfoMutex;
-std::vector<ContextInfo*> g_contextInfoToFreeInEndVector;
+std::vector<ContextInfo *> g_contextInfoToFreeInEndVector;
 
 // Variables related to thread which store data in file.
 std::string g_fileName = "pcsampling.dat";
 std::thread g_storeDataInFileThreadHandle;
-std::queue<std::pair<CUpti_PCSamplingData*, ContextInfo*>> g_pcSampDataQueue;
+std::queue<std::pair<CUpti_PCSamplingData *, ContextInfo *>> g_pcSampDataQueue;
 bool g_waitAtJoin = false;
 std::mutex g_pcSampDataQueueMutex;
 bool g_createdWorkerThread = false;
@@ -154,7 +130,7 @@ std::mutex g_workerThreadMutex;
 bool g_initializedInjection = false;
 std::mutex g_initializeInjectionMutex;
 
-// variables for args set through script.
+// Variables for args set through script.
 CUpti_PCSamplingCollectionMode g_pcSamplingCollectionMode = CUPTI_PC_SAMPLING_COLLECTION_MODE_CONTINUOUS;
 uint32_t g_samplingPeriod = 0;
 size_t g_scratchBufSize = 0;
@@ -167,77 +143,80 @@ bool g_verbose = false;
 
 bool g_running = false;
 
-static void ReadInputParams()
+static void
+ReadInputParams()
 {
-    char* injectionParam = getenv("INJECTION_PARAM");
-
-    if (injectionParam == NULL)
+    char *pInjectionParam = getenv("INJECTION_PARAM");
+    if (pInjectionParam == NULL)
     {
         g_circularBuffer.resize(g_circularbufCount);
         g_bufferEmptyTrackerArray.resize(g_circularbufCount, false);
         return;
     }
 
-    char *token = strtok(injectionParam, " ");
+    char *pToken = strtok(pInjectionParam, " ");
 
-    while (token != NULL)
+    while (pToken != NULL)
     {
-        if(!strcmp(token, "--collection-mode"))
+        if (!strcmp(pToken, "--collection-mode"))
         {
-            token = strtok(NULL," ");
-            g_pcSamplingCollectionMode = (CUpti_PCSamplingCollectionMode)atoi(token);
+            pToken = strtok(NULL," ");
+            g_pcSamplingCollectionMode = (CUpti_PCSamplingCollectionMode)atoi(pToken);
         }
-        else if(!strcmp(token, "--sampling-period"))
+        else if (!strcmp(pToken, "--sampling-period"))
         {
-            token = strtok(NULL," ");
-            g_samplingPeriod = (uint32_t)atoi(token);
+            pToken = strtok(NULL," ");
+            g_samplingPeriod = (uint32_t)atoi(pToken);
         }
-        else if(!strcmp(token, "--scratch-buf-size"))
+        else if (!strcmp(pToken, "--scratch-buf-size"))
         {
-            token = strtok(NULL," ");
-            g_scratchBufSize = (size_t)atoi(token);
+            pToken = strtok(NULL," ");
+            g_scratchBufSize = (size_t)atoi(pToken);
         }
-        else if(!strcmp(token, "--hw-buf-size"))
+        else if (!strcmp(pToken, "--hw-buf-size"))
         {
-            token = strtok(NULL," ");
-            g_hwBufSize = (size_t)atoi(token);
+            pToken = strtok(NULL," ");
+            g_hwBufSize = (size_t)atoi(pToken);
         }
-        else if(!strcmp(token, "--pc-config-buf-record-count"))
+        else if (!strcmp(pToken, "--pc-config-buf-record-count"))
         {
-            token = strtok(NULL," ");
-            g_pcConfigBufRecordCount = (size_t)atoi(token);
+            pToken = strtok(NULL," ");
+            g_pcConfigBufRecordCount = (size_t)atoi(pToken);
         }
-        else if(!strcmp(token, "--pc-circular-buf-record-count"))
+        else if (!strcmp(pToken, "--pc-circular-buf-record-count"))
         {
-            token = strtok(NULL," ");
-            g_circularbufSize = (size_t)atoi(token);
+            pToken = strtok(NULL," ");
+            g_circularbufSize = (size_t)atoi(pToken);
         }
-        else if(!strcmp(token, "--circular-buf-count"))
+        else if (!strcmp(pToken, "--circular-buf-count"))
         {
-            token = strtok(NULL," ");
-            g_circularbufCount = (size_t)atoi(token);
+            pToken = strtok(NULL," ");
+            g_circularbufCount = (size_t)atoi(pToken);
         }
-        else if(!strcmp(token, "--file-name"))
+        else if (!strcmp(pToken, "--file-name"))
         {
-            token = strtok(NULL," ");
-            std::string file(token);
+            pToken = strtok(NULL," ");
+            std::string file(pToken);
             g_fileName = file;
         }
-        else if(!strcmp(token, "--disable-file-dump"))
+        else if (!strcmp(pToken, "--disable-file-dump"))
         {
             g_disableFileDump = true;
         }
-        else if(!strcmp(token, "--verbose"))
+        else if (!strcmp(pToken, "--verbose"))
         {
             g_verbose = true;
         }
-        token = strtok(NULL," ");
+        pToken = strtok(NULL," ");
     }
     g_circularBuffer.resize(g_circularbufCount);
     g_bufferEmptyTrackerArray.resize(g_circularbufCount, false);
 }
 
-static bool GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSamplingGetDataParams, ContextInfo *contextInfo)
+static bool
+GetPcSamplingDataFromCupti(
+    CUpti_PCSamplingGetDataParams &pcSamplingGetDataParams,
+    ContextInfo *pContextInfo)
 {
     CUpti_PCSamplingData *pPcSamplingData = NULL;
 
@@ -253,7 +232,7 @@ static bool GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSampling
     if (!g_disableFileDump)
     {
         g_bufferEmptyTrackerArray[g_put] = true;
-        g_put = (g_put+1) % g_circularbufCount;
+        g_put = (g_put + 1) % g_circularbufCount;
     }
     g_circularBufferMutex.unlock();
 
@@ -271,33 +250,35 @@ static bool GetPcSamplingDataFromCupti(CUpti_PCSamplingGetDataParams &pcSampling
     if (!g_disableFileDump)
     {
         g_pcSampDataQueueMutex.lock();
-        g_pcSampDataQueue.push(std::make_pair(pPcSamplingData, contextInfo));
+        g_pcSampDataQueue.push(std::make_pair(pPcSamplingData, pContextInfo));
         g_pcSampDataQueueMutex.unlock();
     }
+
     return true;
 }
 
-static void StorePcSampDataInFile()
+static void
+StorePcSampDataInFile()
 {
     CUptiUtilResult utilResult;
-    ContextInfo *contextInfo;
+    ContextInfo *pContextInfo;
     CUpti_PCSamplingData *pcSamplingData;
 
     g_pcSampDataQueueMutex.lock();
     pcSamplingData = g_pcSampDataQueue.front().first;
-    contextInfo = g_pcSampDataQueue.front().second;
+    pContextInfo = g_pcSampDataQueue.front().second;
     g_pcSampDataQueue.pop();
     g_pcSampDataQueueMutex.unlock();
 
-    std::string file = std::to_string((long int)contextInfo->contextUid) + "_" + g_fileName;
+    std::string file = std::to_string((long int)pContextInfo->contextUid) + "_" + g_fileName;
 
     CUptiUtil_PutPcSampDataParams pPutPcSampDataParams = {};
     pPutPcSampDataParams.size = CUptiUtil_PutPcSampDataParamsSize;
     pPutPcSampDataParams.bufferType = PC_SAMPLING_BUFFER_PC_TO_COUNTER_DATA;
     pPutPcSampDataParams.pSamplingData = (void*)pcSamplingData;
-    pPutPcSampDataParams.numAttributes = contextInfo->pcSamplingConfigurationInfo.size();
-    pPutPcSampDataParams.pPCSamplingConfigurationInfo = contextInfo->pcSamplingConfigurationInfo.data();
-    pPutPcSampDataParams.pPcSamplingStallReasons = &contextInfo->pcSamplingStallReasons;
+    pPutPcSampDataParams.numAttributes = pContextInfo->pcSamplingConfigurationInfo.size();
+    pPutPcSampDataParams.pPCSamplingConfigurationInfo = pContextInfo->pcSamplingConfigurationInfo.data();
+    pPutPcSampDataParams.pPcSamplingStallReasons = &pContextInfo->pcSamplingStallReasons;
     pPutPcSampDataParams.fileName = file.c_str();
 
     utilResult = CuptiUtilPutPcSampData(&pPutPcSampDataParams);
@@ -314,9 +295,10 @@ static void StorePcSampDataInFile()
     g_get = (g_get + 1) % g_circularbufCount;
 }
 
-static void StorePcSampDataInFileThread()
+static void
+StorePcSampDataInFileThread()
 {
-    while(1)
+    while (1)
     {
         if (g_waitAtJoin)
         {
@@ -328,7 +310,7 @@ static void StorePcSampDataInFileThread()
         }
         else
         {
-            while(!g_pcSampDataQueue.empty())
+            while (!g_pcSampDataQueue.empty())
             {
                 StorePcSampDataInFile();
             }
@@ -337,9 +319,10 @@ static void StorePcSampDataInFileThread()
     }
 }
 
-static void PreallocateBuffersForRecords()
+static void
+PreallocateBuffersForRecords()
 {
-    for (size_t buffers=0; buffers<g_circularbufCount; buffers++)
+    for (size_t buffers = 0; buffers < g_circularbufCount; buffers++)
     {
         g_circularBuffer[buffers].size = sizeof(CUpti_PCSamplingData);
         g_circularBuffer[buffers].collectNumPcs = g_circularbufSize;
@@ -355,7 +338,7 @@ static void PreallocateBuffersForRecords()
 
 static void FreePreallocatedMemory()
 {
-    for (size_t buffers=0; buffers<g_circularbufCount; buffers++)
+    for (size_t buffers = 0; buffers < g_circularbufCount; buffers++)
     {
         for (size_t i = 0; i < g_circularBuffer[buffers].collectNumPcs; i++)
         {
@@ -365,9 +348,9 @@ static void FreePreallocatedMemory()
         free(g_circularBuffer[buffers].pPcData);
     }
 
-    for(auto& itr: g_contextInfoMap)
+    for (auto& itr: g_contextInfoMap)
     {
-        // free PC sampling buffer
+        // Free PC sampling buffer.
         for (uint32_t i = 0; i < g_pcConfigBufRecordCount; i++)
         {
             free(itr.second->pcSamplingData.pPcData[i].stallReason);
@@ -386,7 +369,7 @@ static void FreePreallocatedMemory()
 
     for(auto& itr: g_contextInfoToFreeInEndVector)
     {
-        // free PC sampling buffer
+        // Free PC sampling buffer.
         for (uint32_t i = 0; i < g_pcConfigBufRecordCount; i++)
         {
             free(itr->pcSamplingData.pPcData[i].stallReason);
@@ -403,19 +386,21 @@ static void FreePreallocatedMemory()
         free(itr);
     }
 
-    for(auto it = functions.begin(); it != functions.end(); ++it)
+    for (auto it = functions.begin(); it != functions.end(); ++it)
     {
         free(*it);
     }
     functions.clear();
 }
 
-void ConfigureActivity(CUcontext cuCtx)
+void
+ConfigureActivity(
+    CUcontext cuCtx)
 {
     std::map<CUcontext, ContextInfo*>::iterator contextStateMapItr = g_contextInfoMap.find(cuCtx);
     if (contextStateMapItr == g_contextInfoMap.end())
     {
-        std::cout << "Error : No ctx found" << std::endl;
+        std::cout << "Error: No context found." << std::endl;
         exit (EXIT_FAILURE);
     }
 
@@ -427,7 +412,7 @@ void ConfigureActivity(CUcontext cuCtx)
     CUpti_PCSamplingConfigurationInfo enableStartStop = {};
     CUpti_PCSamplingConfigurationInfo outputDataFormat = {};
 
-    // Get number of supported counters and counter names
+    // Get number of supported counters and counter names.
     size_t numStallReasons = 0;
     CUpti_PCSamplingGetNumStallReasonsParams numStallReasonsParams = {};
     numStallReasonsParams.size = CUpti_PCSamplingGetNumStallReasonsParamsSize;
@@ -435,7 +420,7 @@ void ConfigureActivity(CUcontext cuCtx)
     numStallReasonsParams.numStallReasons = &numStallReasons;
 
     g_stallReasonsCountMutex.lock();
-    CUPTI_CALL(cuptiPCSamplingGetNumStallReasons(&numStallReasonsParams));
+    CUPTI_API_CALL(cuptiPCSamplingGetNumStallReasons(&numStallReasonsParams));
 
     if (!g_collectedStallReasonsCount)
     {
@@ -460,9 +445,9 @@ void ConfigureActivity(CUcontext cuCtx)
     stallReasonsParams.numStallReasons = numStallReasons;
     stallReasonsParams.stallReasonIndex = pStallReasonIndex;
     stallReasonsParams.stallReasons = pStallReasons;
-    CUPTI_CALL(cuptiPCSamplingGetStallReasons(&stallReasonsParams));
+    CUPTI_API_CALL(cuptiPCSamplingGetStallReasons(&stallReasonsParams));
 
-    // User buffer to hold collected PC Sampling data in PC-To-Counter format
+    // User buffer to hold collected PC Sampling data in PC-To-Counter format.
     size_t pcSamplingDataSize = sizeof(CUpti_PCSamplingData);
     contextStateMapItr->second->pcSamplingData.size = pcSamplingDataSize;
     contextStateMapItr->second->pcSamplingData.collectNumPcs = g_pcConfigBufRecordCount;
@@ -519,7 +504,7 @@ void ConfigureActivity(CUcontext cuCtx)
     pcSamplingConfigurationInfoParams.numAttributes = pcSamplingConfigurationInfo.size();
     pcSamplingConfigurationInfoParams.pPCSamplingConfigurationInfo = pcSamplingConfigurationInfo.data();
 
-    CUPTI_CALL(cuptiPCSamplingSetConfigurationAttribute(&pcSamplingConfigurationInfoParams));
+    CUPTI_API_CALL(cuptiPCSamplingSetConfigurationAttribute(&pcSamplingConfigurationInfoParams));
 
     // Store all stall reasons info in context info to dump into the file.
     contextStateMapItr->second->pcSamplingStallReasons.numStallReasons = numStallReasons;
@@ -547,7 +532,7 @@ void ConfigureActivity(CUcontext cuCtx)
     getPcSamplingConfigurationInfoParams.numAttributes = pcSamplingRetrieveConfigurationInfo.size();
     getPcSamplingConfigurationInfoParams.pPCSamplingConfigurationInfo = pcSamplingRetrieveConfigurationInfo.data();
 
-    CUPTI_CALL(cuptiPCSamplingGetConfigurationAttribute(&getPcSamplingConfigurationInfoParams));
+    CUPTI_API_CALL(cuptiPCSamplingGetConfigurationAttribute(&getPcSamplingConfigurationInfoParams));
 
     for (size_t i = 0; i < getPcSamplingConfigurationInfoParams.numAttributes; i++)
     {
@@ -586,15 +571,16 @@ void ConfigureActivity(CUcontext cuCtx)
     return;
 }
 
-void AtExitHandler()
+void
+AtExitHandler()
 {
-    // Check for any error occured while pc sampling
+    // Check for any error occured while pc sampling.
     CUptiResult cuptiStatus = cuptiGetLastError();
     if (cuptiStatus != CUPTI_SUCCESS)
     {
-        const char* errstr;
-        cuptiGetResultString(cuptiStatus, &errstr);
-        printf("%s: %d: error: function cuptiGetLastError() failed with error %s.\n", __FILE__, __LINE__, errstr);
+        const char *pErrorString;
+        cuptiGetResultString(cuptiStatus, &pErrorString);
+        printf("%s: %d: error: function cuptiGetLastError() failed with error %s.\n", __FILE__, __LINE__, pErrorString);
         g_waitAtJoin = true;
         if (g_storeDataInFileThreadHandle.joinable())
         {
@@ -607,15 +593,15 @@ void AtExitHandler()
     if (g_running)
     {
         g_running = false;
-        // iterate over all context. If context is not destroyed then
+        // Iterate over all context. If context is not destroyed then
         // disable PC sampling to flush remaining data to user's buffer.
-        for(auto& itr: g_contextInfoMap)
+        for (auto& itr: g_contextInfoMap)
         {
-            auto GetPcSamplingData = [&](CUpti_PCSamplingGetDataParams &pcSamplingGetDataParams, ContextInfo *contextInfo)
+            auto GetPcSamplingData = [&](CUpti_PCSamplingGetDataParams &pcSamplingGetDataParams, ContextInfo *pContextInfo)
             {
-                if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextInfo))
+                if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, pContextInfo))
                 {
-                    printf("Failed to get pc sampling data from Cupti\n");
+                    printf("Error: NoFailed to get pc sampling data from Cupti\n");
                     g_waitAtJoin = true;
                     if (g_storeDataInFileThreadHandle.joinable())
                     {
@@ -631,7 +617,7 @@ void AtExitHandler()
             pcSamplingGetDataParams.ctx = itr.first;
 
             // For the case where hawdware buffer is full, remainingNumPc field from pcSamplingData will be 0.
-            // Call GetPcSamplingDataFromCupti() function which calls cuptiPcSamplingGetData() API 
+            // Call GetPcSamplingDataFromCupti() function which calls cuptiPcSamplingGetData() API
             // which reports CUPTI_ERROR_OUT_OF_MEMORY for this case.
             if (itr.second->pcSamplingData.remainingNumPcs == 0)
             {
@@ -646,7 +632,7 @@ void AtExitHandler()
             CUpti_PCSamplingDisableParams pcSamplingDisableParams = {};
             pcSamplingDisableParams.size = CUpti_PCSamplingDisableParamsSize;
             pcSamplingDisableParams.ctx = itr.first;
-            CUPTI_CALL(cuptiPCSamplingDisable(&pcSamplingDisableParams));
+            CUPTI_API_CALL(cuptiPCSamplingDisable(&pcSamplingDisableParams));
 
             if (!g_disableFileDump && itr.second->pcSamplingData.totalNumPcs > 0)
             {
@@ -689,7 +675,9 @@ typedef void (WINAPI* rtlExitUserProcess_t)(uint32_t exitCode);
 rtlExitUserProcess_t Real_RtlExitUserProcess = NULL;
 
 // Detour_RtlExitUserProcess
-void WINAPI Detour_RtlExitUserProcess(uint32_t exitCode)
+void WINAPI
+Detour_RtlExitUserProcess(
+    uint32_t exitCode)
 {
     AtExitHandler();
 
@@ -697,7 +685,8 @@ void WINAPI Detour_RtlExitUserProcess(uint32_t exitCode)
 }
 #endif
 
-void registerAtExitHandler(void) {
+void RegisterAtExitHandler(void)
+{
 #ifdef _WIN32
     {
         // It's unsafe to use atexit(), static destructors, DllMain PROCESS_DETACH, etc.
@@ -760,15 +749,19 @@ void registerAtExitHandler(void) {
 #endif
 }
 
-void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_CallbackId cbid, void* cbdata)
+void CallbackHandler(
+    void *pUserdata,
+    CUpti_CallbackDomain domain,
+    CUpti_CallbackId callbackId,
+    void *pCallbackData)
 {
     switch (domain)
     {
         case CUPTI_CB_DOMAIN_DRIVER_API:
         {
-            const CUpti_CallbackData* cbInfo = (CUpti_CallbackData*)cbdata;
+            const CUpti_CallbackData *pCallbackInfo = (CUpti_CallbackData *)pCallbackData;
 
-            switch (cbid)
+            switch (callbackId)
             {
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunch:
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchGrid:
@@ -779,56 +772,56 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel_ptsz:
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice:
                 {
-                    if (cbInfo->callbackSite == CUPTI_API_EXIT)
+                    if (pCallbackInfo->callbackSite == CUPTI_API_EXIT)
                     {
-                        std::map<CUcontext, ContextInfo*>::iterator contextStateMapItr = g_contextInfoMap.find(cbInfo->context);
+                        std::map<CUcontext, ContextInfo*>::iterator contextStateMapItr = g_contextInfoMap.find(pCallbackInfo->context);
                         if (contextStateMapItr == g_contextInfoMap.end())
                         {
-                            std::cout << "Error : Context not found in map" << std::endl;
+                            std::cout << "Error: Context not found in map." << std::endl;
                             exit(EXIT_FAILURE);
                         }
                         if (!contextStateMapItr->second->contextUid)
                         {
-                            contextStateMapItr->second->contextUid = cbInfo->contextUid;
+                            contextStateMapItr->second->contextUid = pCallbackInfo->contextUid;
                         }
                         // Get PC sampling data from cupti for each range. In such case records will get filled in provided buffer during configuration.
                         // It is recommend to collect those record using cuptiPCSamplingGetData() API.
                         // For _KERNEL_SERIALIZED mode each kernel data is one range.
                         if (g_pcSamplingCollectionMode == CUPTI_PC_SAMPLING_COLLECTION_MODE_KERNEL_SERIALIZED)
                         {
-                            // collect all available records.
+                            // Collect all available records.
                             CUpti_PCSamplingGetDataParams pcSamplingGetDataParams = {};
                             pcSamplingGetDataParams.size = CUpti_PCSamplingGetDataParamsSize;
-                            pcSamplingGetDataParams.ctx = cbInfo->context;
+                            pcSamplingGetDataParams.ctx = pCallbackInfo->context;
 
-                            // collect all records filled in provided buffer during configuration.
+                            // Collect all records filled in provided buffer during configuration.
                             while (contextStateMapItr->second->pcSamplingData.totalNumPcs > 0)
                             {
                                 if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
                                 {
-                                    printf("Failed to get pc sampling data from Cupti\n");
+                                    printf("Error: Failed to get PC Sampling data from CUPTI.\n");
                                     exit(EXIT_FAILURE);
                                 }
                             }
-                            // collect if any extra records which could not accommodated in provided buffer during configuration.
+                            // Collect if any extra records which could not accommodated in provided buffer during configuration.
                             while (contextStateMapItr->second->pcSamplingData.remainingNumPcs > 0)
                             {
                                 if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
                                 {
-                                    printf("Failed to get pc sampling data from Cupti\n");
+                                    printf("Error: Failed to get PC Sampling data from CUPTI.\n");
                                     exit(EXIT_FAILURE);
                                 }
                             }
                         }
-                        else if(contextStateMapItr->second->pcSamplingData.remainingNumPcs >= g_circularbufSize)
+                        else if (contextStateMapItr->second->pcSamplingData.remainingNumPcs >= g_circularbufSize)
                         {
                             CUpti_PCSamplingGetDataParams pcSamplingGetDataParams = {};
                             pcSamplingGetDataParams.size = CUpti_PCSamplingGetDataParamsSize;
-                            pcSamplingGetDataParams.ctx = cbInfo->context;
+                            pcSamplingGetDataParams.ctx = pCallbackInfo->context;
 
                             if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
                             {
-                                printf("Failed to get pc sampling data from Cupti\n");
+                                printf("Error: Failed to get PC Sampling data from CUPTI.\n");
                                 exit(EXIT_FAILURE);
                             }
                         }
@@ -840,10 +833,10 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
         break;
         case CUPTI_CB_DOMAIN_RESOURCE:
         {
-            const CUpti_ResourceData* resourceData = (CUpti_ResourceData*)cbdata;
+            const CUpti_ResourceData *pResourceData = (CUpti_ResourceData *)pCallbackData;
             g_running = true;
 
-            switch(cbid)
+            switch(callbackId)
             {
                 case CUPTI_CBID_RESOURCE_CONTEXT_CREATED:
                 {
@@ -854,18 +847,18 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                         }
 
                         // insert new entry for context.
-                        ContextInfo *contextInfo = (ContextInfo *)calloc(1, sizeof(ContextInfo));
-                        MEMORY_ALLOCATION_CALL(contextInfo);
+                        ContextInfo *pContextInfo = (ContextInfo *)calloc(1, sizeof(ContextInfo));
+                        MEMORY_ALLOCATION_CALL(pContextInfo);
                         g_contextInfoMutex.lock();
-                        g_contextInfoMap.insert(std::make_pair(resourceData->context, contextInfo));
+                        g_contextInfoMap.insert(std::make_pair(pResourceData->context, pContextInfo));
                         g_contextInfoMutex.unlock();
 
                         CUpti_PCSamplingEnableParams pcSamplingEnableParams = {};
                         pcSamplingEnableParams.size = CUpti_PCSamplingEnableParamsSize;
-                        pcSamplingEnableParams.ctx = resourceData->context;
-                        CUPTI_CALL(cuptiPCSamplingEnable(&pcSamplingEnableParams));
+                        pcSamplingEnableParams.ctx = pResourceData->context;
+                        CUPTI_API_CALL(cuptiPCSamplingEnable(&pcSamplingEnableParams));
 
-                        ConfigureActivity(resourceData->context);
+                        ConfigureActivity(pResourceData->context);
 
                         g_circularBufferMutex.lock();
                         if (!g_allocatedCircularBuffers)
@@ -883,9 +876,9 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                     {
                         std::cout << "Injection - Context destroy starting" << std::endl;
                     }
-                    std::map<CUcontext, ContextInfo*>::iterator itr;
+                    std::map<CUcontext, ContextInfo *>::iterator itr;
                     g_contextInfoMutex.lock();
-                    itr = g_contextInfoMap.find(resourceData->context);
+                    itr = g_contextInfoMap.find(pResourceData->context);
                     if (itr == g_contextInfoMap.end())
                     {
                         std::cout << "Warning : This context not found in map of context which enabled PC sampling." << std::endl;
@@ -897,7 +890,7 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                     pcSamplingGetDataParams.ctx = itr->first;
 
                     // For the case where hawdware buffer is full, remainingNumPc field from pcSamplingData will be 0.
-                    // Call GetPcSamplingDataFromCupti() function which calls cuptiPcSamplingGetData() API 
+                    // Call GetPcSamplingDataFromCupti() function which calls cuptiPcSamplingGetData() API
                     // which reports CUPTI_ERROR_OUT_OF_MEMORY for this case.
                     if (itr->second->pcSamplingData.remainingNumPcs == 0)
                     {
@@ -919,8 +912,8 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
 
                     CUpti_PCSamplingDisableParams pcSamplingDisableParams = {};
                     pcSamplingDisableParams.size = CUpti_PCSamplingDisableParamsSize;
-                    pcSamplingDisableParams.ctx = resourceData->context;
-                    CUPTI_CALL(cuptiPCSamplingDisable(&pcSamplingDisableParams));
+                    pcSamplingDisableParams.ctx = pResourceData->context;
+                    CUPTI_API_CALL(cuptiPCSamplingDisable(&pcSamplingDisableParams));
 
                     // It is quite possible that after pc sampling disabled cupti fill remaining records
                     // collected lately from hardware in provided buffer during configuration.
@@ -940,7 +933,7 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                 case CUPTI_CBID_RESOURCE_MODULE_LOADED:
                 {
                     g_contextInfoMutex.lock();
-                    std::map<CUcontext, ContextInfo*>::iterator contextStateMapItr = g_contextInfoMap.find(resourceData->context);
+                    std::map<CUcontext, ContextInfo *>::iterator contextStateMapItr = g_contextInfoMap.find(pResourceData->context);
                     if (contextStateMapItr == g_contextInfoMap.end())
                     {
                         std::cout << "Error : Context not found in map" << std::endl;
@@ -952,9 +945,9 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                     // If module get unloaded then afterwards records will belong to a new range.
                     CUpti_PCSamplingGetDataParams pcSamplingGetDataParams = {};
                     pcSamplingGetDataParams.size = CUpti_PCSamplingGetDataParamsSize;
-                    pcSamplingGetDataParams.ctx = resourceData->context;
+                    pcSamplingGetDataParams.ctx = pResourceData->context;
 
-                    // collect all records filled in provided buffer during configuration.
+                    // Collect all records filled in provided buffer during configuration.
                     while (contextStateMapItr->second->pcSamplingData.totalNumPcs > 0)
                     {
                         if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
@@ -963,7 +956,7 @@ void CallbackHandler(void* userdata, CUpti_CallbackDomain domain, CUpti_Callback
                             exit(EXIT_FAILURE);
                         }
                     }
-                    // collect if any extra records which could not accommodated in provided buffer during configuration.
+                    // Collect if any extra records which could not accommodated in provided buffer during configuration.
                     while (contextStateMapItr->second->pcSamplingData.remainingNumPcs > 0)
                     {
                         if (!GetPcSamplingDataFromCupti(pcSamplingGetDataParams, contextStateMapItr->second))
@@ -996,26 +989,26 @@ extern "C" int InitializeInjection(void)
         ReadInputParams();
 
         CUpti_SubscriberHandle subscriber;
-        CUPTI_CALL(cuptiSubscribe(&subscriber, (CUpti_CallbackFunc)&CallbackHandler, NULL));
+        CUPTI_API_CALL(cuptiSubscribe(&subscriber, (CUpti_CallbackFunc)&CallbackHandler, NULL));
 
-        // Subscribe for all the launch callbacks
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunch));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchGrid));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchGridAsync));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel_ptsz));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel_ptsz));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice));
-        // Subscribe for module and context callbacks
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_MODULE_LOADED));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_CONTEXT_CREATED));
-        CUPTI_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_CONTEXT_DESTROY_STARTING));
+        // Subscribe for all the launch callbacks.
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunch));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchGrid));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchGridAsync));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel_ptsz));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel_ptsz));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice));
+        // Subscribe for module and context callbacks.
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_MODULE_LOADED));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_CONTEXT_CREATED));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_CONTEXT_DESTROY_STARTING));
 
         g_initializedInjection = true;
     }
 
-    registerAtExitHandler();
+    RegisterAtExitHandler();
     g_initializeInjectionMutex.unlock();
 
     return 1;

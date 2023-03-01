@@ -1,9 +1,12 @@
 #include "pc_sampling_utility_helper.h"
 #include <stdlib.h>
 
-int main(int argc, char *argv[])
+int
+main(
+    int argc,
+    char *argv[])
 {
-    CUpti_PCSamplingData *mergedPcSampDataBuffer = NULL;
+    CUpti_PCSamplingData *pMergedPcSampDataBuffer = NULL;
     size_t numMergedPcSampDataBuffer = 0;
 
     Init();
@@ -15,8 +18,8 @@ int main(int argc, char *argv[])
     {
         if (!disableMerge && collectionMode != CUPTI_PC_SAMPLING_COLLECTION_MODE_KERNEL_SERIALIZED)
         {
-            MergePcSampDataBuffers(&mergedPcSampDataBuffer, numMergedPcSampDataBuffer);
-            SourceCorrelation(mergedPcSampDataBuffer, numMergedPcSampDataBuffer);
+            MergePcSampDataBuffers(&pMergedPcSampDataBuffer, numMergedPcSampDataBuffer);
+            SourceCorrelation(pMergedPcSampDataBuffer, numMergedPcSampDataBuffer);
         }
         else
         {
@@ -33,7 +36,7 @@ int main(int argc, char *argv[])
 
     // Free memory
     FreePcSampStallReasonsMemory();
-    FreePcSampDataBuffers(mergedPcSampDataBuffer, numMergedPcSampDataBuffer);
+    FreePcSampDataBuffers(pMergedPcSampDataBuffer, numMergedPcSampDataBuffer);
     FreePcSampDataBuffers(buffersRetrievedDataVector.data(), buffersRetrievedDataVector.size());
     FreeCrcModuleMapMemory();
 

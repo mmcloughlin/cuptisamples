@@ -8,7 +8,7 @@ endif
 
 CUDA_INSTALL_PATH ?= ../../../..
 NVCC := "$(CUDA_INSTALL_PATH)/bin/nvcc"
-INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include
+INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I ../common
 
 TARGET_ARCH ?= $(HOST_ARCH)
 TARGET_OS ?= $(shell uname | tr A-Z a-z)
@@ -78,18 +78,15 @@ SMS ?= 52 53 60 61 62 70 72 75 80 86 87 89 90
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
-cupti_nvtx: cupti_nvtx.$(OBJ) vec.$(OBJ)
+cupti_nvtx: cupti_nvtx.$(OBJ)
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ $^ $(LIBS) $(INCLUDES)
 	$(info $(SET_NVTX_ENV) and run the application.)
 
-cupti_nvtx.$(OBJ): cupti_nvtx.cpp
-	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -c $(INCLUDES) $<
-
-vec.$(OBJ): vec.cu
+cupti_nvtx.$(OBJ): cupti_nvtx.cu
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(GENCODE_FLAGS) -c $(INCLUDES) $<
 
 run: cupti_nvtx
 	./$<
 
 clean:
-	rm -f cupti_nvtx cupti_nvtx.$(OBJ) vec.$(OBJ)
+	rm -f cupti_nvtx cupti_nvtx.$(OBJ)

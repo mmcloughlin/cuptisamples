@@ -8,7 +8,7 @@ endif
 
 CUDA_INSTALL_PATH ?= ../../../..
 NVCC := "$(CUDA_INSTALL_PATH)/bin/nvcc"
-INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include
+INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I ../common
 
 TARGET_ARCH ?= $(HOST_ARCH)
 TARGET_OS ?= $(shell uname | tr A-Z a-z)

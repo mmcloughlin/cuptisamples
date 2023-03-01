@@ -1,77 +1,40 @@
 //
-// Copyright 2020 NVIDIA Corporation. All rights reserved
+// Copyright 2020-2022 NVIDIA Corporation. All rights reserved
 //
 
-#include <cupti_target.h>
-#include <cupti_profiler_target.h>
-#include <cupti_callbacks.h>
-#include <cupti_driver_cbid.h>
-#include <nvperf_host.h>
-#include <cuda.h>
-#include <cuda_runtime.h>
+// System headers
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Metric.h>
+
+// CUDA headers
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+// CUPTI headers
+#include "helper_cupti.h"
+#include <cupti_target.h>
+#include <cupti_callbacks.h>
+#include <cupti_driver_cbid.h>
+#include <cupti_profiler_target.h>
+
+// Perfworks headers
+#include <nvperf_host.h>
+
+// Make use of example code wrappers for NVPW calls.
 #include <Eval.h>
+#include <Metric.h>
 #include <FileOp.h>
 
-#ifndef EXIT_WAIVED
-#define EXIT_WAIVED 2
-#endif
-
-#define NVPW_API_CALL(apiFuncCall)                                             \
-do {                                                                           \
-    NVPA_Status _status = apiFuncCall;                                         \
-    if (_status != NVPA_STATUS_SUCCESS) {                                      \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %d.\n",   \
-                __FILE__, __LINE__, #apiFuncCall, _status);                    \
-        exit(EXIT_FAILURE);                                                    \
-    }                                                                          \
-} while (0)
-
-#define CUPTI_API_CALL(apiFuncCall)                                            \
-do {                                                                           \
-    CUptiResult _status = apiFuncCall;                                         \
-    if (_status != CUPTI_SUCCESS) {                                            \
-        const char *errstr;                                                    \
-        cuptiGetResultString(_status, &errstr);                                \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",   \
-                __FILE__, __LINE__, #apiFuncCall, errstr);                     \
-        exit(EXIT_FAILURE);                                                    \
-    }                                                                          \
-} while (0)
-
-#define DRIVER_API_CALL(apiFuncCall)                                           \
-do {                                                                           \
-    CUresult _status = apiFuncCall;                                            \
-    if (_status != CUDA_SUCCESS) {                                             \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %d.\n",   \
-                __FILE__, __LINE__, #apiFuncCall, _status);                    \
-        exit(EXIT_FAILURE);                                                    \
-    }                                                                          \
-} while (0)
-
-#define RUNTIME_API_CALL(apiFuncCall)                                          \
-do {                                                                           \
-    cudaError_t _status = apiFuncCall;                                         \
-    if (_status != cudaSuccess) {                                              \
-        fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",   \
-                __FILE__, __LINE__, #apiFuncCall, cudaGetErrorString(_status));\
-        exit(EXIT_FAILURE);                                                     \
-    }                                                                          \
-} while (0)
-
-#define METRIC_NAME "sm__ctas_launched.sum"
-
-struct ProfilingData_t
+// Structures
+typedef struct ProfilingData_t
 {
     int numRanges = 2;
     bool bProfiling = false;
     std::string chipName;
     std::vector<std::string> metricNames;
-    std::string CounterDataFileName = "SimpleCupti.counterdata";
-    std::string CounterDataSBFileName = "SimpleCupti.counterdataSB";
+    std::string counterDataFileName = "SimpleCupti.counterdata";
+    std::string counterDataSBFileName = "SimpleCupti.counterdataSB";
     CUpti_ProfilerRange profilerRange = CUPTI_AutoRange;
     CUpti_ProfilerReplayMode profilerReplayMode = CUPTI_UserReplay;
     bool allPassesSubmitted = true;
@@ -79,17 +42,30 @@ struct ProfilingData_t
     std::vector<uint8_t> configImage;
     std::vector<uint8_t> counterDataImage;
     std::vector<uint8_t> counterDataScratchBuffer;
-};
+} ProfilingData;
 
-__global__
-void VecAdd(const int* A, const int* B, int* C, int N)
+// Macros
+#define METRIC_NAME "sm__ctas_launched.sum"
+
+// Kernels
+__global__ void
+VectorAdd(
+    const int *pA,
+    const int *pB,
+    int *pC,
+    int N)
 {
     int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < N)
-        C[i] = A[i] + B[i];
+    {
+        pC[i] = pA[i] + pB[i];
+    }
 }
 
-void enableProfiling(ProfilingData_t* pProfilingData)
+// Functions
+void
+EnableProfiling(
+    ProfilingData *pProfilingData)
 {
     CUpti_Profiler_EnableProfiling_Params enableProfilingParams = { CUpti_Profiler_EnableProfiling_Params_STRUCT_SIZE };
     if (pProfilingData->profilerReplayMode == CUPTI_KernelReplay)
@@ -104,7 +80,9 @@ void enableProfiling(ProfilingData_t* pProfilingData)
     }
 }
 
-void disableProfiling(ProfilingData_t* pProfilingData)
+void
+DisableProfiling(
+    ProfilingData *pProfilingData)
 {
     CUpti_Profiler_DisableProfiling_Params disableProfilingParams = { CUpti_Profiler_DisableProfiling_Params_STRUCT_SIZE };
     CUPTI_API_CALL(cuptiProfilerDisableProfiling(&disableProfilingParams));
@@ -127,7 +105,9 @@ void disableProfiling(ProfilingData_t* pProfilingData)
     }
 }
 
-void beginSession(ProfilingData_t* pProfilingData)
+void
+BeginSession(
+    ProfilingData *pProfilingData)
 {
     CUpti_Profiler_BeginSession_Params beginSessionParams = { CUpti_Profiler_BeginSession_Params_STRUCT_SIZE };
     beginSessionParams.ctx = NULL;
@@ -142,7 +122,9 @@ void beginSession(ProfilingData_t* pProfilingData)
     CUPTI_API_CALL(cuptiProfilerBeginSession(&beginSessionParams));
 }
 
-void setConfig(ProfilingData_t* pProfilingData)
+void
+SetConfig(
+    ProfilingData *pProfilingData)
 {
     CUpti_Profiler_SetConfig_Params setConfigParams = { CUpti_Profiler_SetConfig_Params_STRUCT_SIZE };
     setConfigParams.pConfig = &pProfilingData->configImage[0];
@@ -151,11 +133,12 @@ void setConfig(ProfilingData_t* pProfilingData)
     CUPTI_API_CALL(cuptiProfilerSetConfig(&setConfigParams));
 }
 
-void createCounterDataImage(int numRanges,
+void
+CreateCounterDataImage(
+    int numRanges,
     std::vector<uint8_t>& counterDataImagePrefix,
     std::vector<uint8_t>& counterDataScratchBuffer,
-    std::vector<uint8_t>& counterDataImage
-)
+    std::vector<uint8_t>& counterDataImage)
 {
     CUpti_Profiler_CounterDataImageOptions counterDataImageOptions;
     counterDataImageOptions.pCounterDataPrefix = &counterDataImagePrefix[0];
@@ -191,9 +174,11 @@ void createCounterDataImage(int numRanges,
     CUPTI_API_CALL(cuptiProfilerCounterDataImageInitializeScratchBuffer(&initScratchBufferParams));
 }
 
-void setupProfiling(ProfilingData_t* pProfilingData)
+void
+SetupProfiling(
+    ProfilingData *pProfilingData)
 {
-    /* Generate configuration for metrics, this can also be done offline*/
+    // Generate configuration for metrics, this can also be done offline.
     NVPW_InitializeHost_Params initializeHostParams = { NVPW_InitializeHost_Params_STRUCT_SIZE };
     NVPW_API_CALL(NVPW_InitializeHost(&initializeHostParams));
 
@@ -216,14 +201,16 @@ void setupProfiling(ProfilingData_t* pProfilingData)
         exit(EXIT_FAILURE);
     }
 
-    createCounterDataImage(pProfilingData->numRanges, pProfilingData->counterDataImagePrefix,
+    CreateCounterDataImage(pProfilingData->numRanges, pProfilingData->counterDataImagePrefix,
                            pProfilingData->counterDataScratchBuffer, pProfilingData->counterDataImage);
 
-    beginSession(pProfilingData);
-    setConfig(pProfilingData);
+    BeginSession(pProfilingData);
+    SetConfig(pProfilingData);
 }
 
-void stopProfiling(ProfilingData_t* pProfilingData)
+void
+StopProfiling(
+    ProfilingData *pProfilingData)
 {
     CUpti_Profiler_UnsetConfig_Params unsetConfigParams = { CUpti_Profiler_UnsetConfig_Params_STRUCT_SIZE };
     CUpti_Profiler_EndSession_Params endSessionParams = { CUpti_Profiler_EndSession_Params_STRUCT_SIZE };
@@ -234,135 +221,178 @@ void stopProfiling(ProfilingData_t* pProfilingData)
     CUPTI_API_CALL(cuptiProfilerDeInitialize(&profilerDeInitializeParams));
 
     // Dump counterDataImage and counterDataScratchBuffer in file.
-    WriteBinaryFile(pProfilingData->CounterDataFileName.c_str(), pProfilingData->counterDataImage);
-    WriteBinaryFile(pProfilingData->CounterDataSBFileName.c_str(), pProfilingData->counterDataScratchBuffer);
+    WriteBinaryFile(pProfilingData->counterDataFileName.c_str(), pProfilingData->counterDataImage);
+    WriteBinaryFile(pProfilingData->counterDataSBFileName.c_str(), pProfilingData->counterDataScratchBuffer);
 }
 
-void callbackHandler(void* userdata, CUpti_CallbackDomain domain,
-                      CUpti_CallbackId cbid, void* cbdata)
+void
+ProfilingCallbackHandler(
+    void *pUserData,
+    CUpti_CallbackDomain domain,
+    CUpti_CallbackId callbackId,
+    void *pCallbackData)
 {
-    ProfilingData_t* profilingData = (ProfilingData_t*)(userdata);
-    const CUpti_CallbackData* cbInfo = (CUpti_CallbackData*)cbdata;
+    ProfilingData *pProfilingData = (ProfilingData *)(pUserData);
+    const CUpti_CallbackData *pCallbackInfo = (CUpti_CallbackData *)pCallbackData;
+
     switch (domain)
     {
-    case CUPTI_CB_DOMAIN_DRIVER_API:
-        switch (cbid)
+        case CUPTI_CB_DOMAIN_DRIVER_API:
         {
-        case CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel:
-        {
-            if (cbInfo->callbackSite == CUPTI_API_ENTER)
+            switch (callbackId)
             {
-                enableProfiling(profilingData);
+                case CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel:
+                {
+                    if (pCallbackInfo->callbackSite == CUPTI_API_ENTER)
+                    {
+                        EnableProfiling(pProfilingData);
+                    }
+                    else
+                    {
+                        DisableProfiling(pProfilingData);
+                    }
+                }
+                break;
+                default:
+                    break;
             }
-            else
-            {
-                disableProfiling(profilingData);
-            }
-        }
-        break;
-        default:
             break;
         }
-        break;
-    case CUPTI_CB_DOMAIN_RESOURCE:
-        switch (cbid)
+        case CUPTI_CB_DOMAIN_RESOURCE:
         {
-        case CUPTI_CBID_RESOURCE_CONTEXT_CREATED:
-        {
-            setupProfiling(profilingData);
-            profilingData->bProfiling = true;
-        }
-        break;
-        default:
+            switch (callbackId)
+            {
+                case CUPTI_CBID_RESOURCE_CONTEXT_CREATED:
+                {
+                    SetupProfiling(pProfilingData);
+                    pProfilingData->bProfiling = true;
+                }
+                break;
+                default:
+                    break;
+            }
             break;
         }
-        break;
-    default:
-        break;
+        default:
+            break;
     }
 
 }
 
-void initVec(int* vec, int n)
+void
+InitializeVector(
+    int *pVector,
+    int N)
 {
-    for (int i = 0; i < n; i++)
-        vec[i] = i;
+    for (int i = 0; i < N; i++)
+    {
+        pVector[i] = i;
+    }
 }
 
-void cleanUp(int* h_A, int* h_B, int* h_C, int* d_A, int* d_B, int* d_C)
+static void
+CleanUp(
+    int *pHostA,
+    int *pHostB,
+    int *pHostC,
+    int *pDeviceA,
+    int *pDeviceB,
+    int *pDeviceC)
 {
-    if (d_A)
-        RUNTIME_API_CALL(cudaFree(d_A));
-    if (d_B)
-        RUNTIME_API_CALL(cudaFree(d_B));
-    if (d_C)
-        RUNTIME_API_CALL(cudaFree(d_C));
+    // Free host memory.
+    if (pHostA)
+    {
+        free(pHostA);
+    }
+    if (pHostB)
+    {
+        free(pHostB);
+    }
+    if (pHostC)
+    {
+        free(pHostC);
+    }
 
-    // Free host memory
-    if (h_A)
-        free(h_A);
-    if (h_B)
-        free(h_B);
-    if (h_C)
-        free(h_C);
+    // Free device memory.
+    if (pDeviceA)
+    {
+        RUNTIME_API_CALL(cudaFree(pDeviceA));
+    }
+    if (pDeviceB)
+    {
+        RUNTIME_API_CALL(cudaFree(pDeviceB));
+    }
+    if (pDeviceC)
+    {
+        RUNTIME_API_CALL(cudaFree(pDeviceC));
+    }
 }
 
-void VectorAdd()
+void
+DoVectorAddition()
 {
     int N = 50000;
     size_t size = N * sizeof(int);
     int threadsPerBlock = 0;
     int blocksPerGrid = 0;
-    int* h_A, * h_B, * h_C;
-    int* d_A, * d_B, * d_C;
+    int* pHostA, * pHostB, * pHostC;
+    int* pDeviceA, * pDeviceB, * pDeviceC;
     int i, sum;
 
-    // Allocate input vectors h_A and h_B in host memory
-    h_A = (int*)malloc(size);
-    h_B = (int*)malloc(size);
-    h_C = (int*)malloc(size);
+    // Allocate input vectors pHostA and pHostB in host memory.
+    pHostA = (int *)malloc(size);
+    MEMORY_ALLOCATION_CALL(pHostA);
+
+    pHostB = (int *)malloc(size);
+    MEMORY_ALLOCATION_CALL(pHostB);
+
+    pHostC = (int *)malloc(size);
+    MEMORY_ALLOCATION_CALL(pHostC);
 
     // Initialize input vectors
-    initVec(h_A, N);
-    initVec(h_B, N);
-    memset(h_C, 0, size);
+    InitializeVector(pHostA, N);
+    InitializeVector(pHostB, N);
+    memset(pHostC, 0, size);
 
-    // Allocate vectors in device memory
-    RUNTIME_API_CALL(cudaMalloc((void**)&d_A, size));
-    RUNTIME_API_CALL(cudaMalloc((void**)&d_B, size));
-    RUNTIME_API_CALL(cudaMalloc((void**)&d_C, size));
+    // Allocate vectors in device memory.
+    RUNTIME_API_CALL(cudaMalloc((void **)&pDeviceA, size));
+    RUNTIME_API_CALL(cudaMalloc((void **)&pDeviceB, size));
+    RUNTIME_API_CALL(cudaMalloc((void **)&pDeviceC, size));
 
-    // Copy vectors from host memory to device memory
-    RUNTIME_API_CALL(cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice));
-    RUNTIME_API_CALL(cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice));
+    // Copy vectors from host memory to device memory.
+    RUNTIME_API_CALL(cudaMemcpy(pDeviceA, pHostA, size, cudaMemcpyHostToDevice));
+    RUNTIME_API_CALL(cudaMemcpy(pDeviceB, pHostB, size, cudaMemcpyHostToDevice));
 
-    // Invoke kernel
+    // Invoke kernel.
     threadsPerBlock = 256;
     blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
-    printf("Launching kernel: blocks %d, thread/block %d\n",
-        blocksPerGrid, threadsPerBlock);
+    printf("Launching kernel: blocks %d, thread/block %d\n", blocksPerGrid, threadsPerBlock);
 
-    VecAdd << <blocksPerGrid, threadsPerBlock >> > (d_A, d_B, d_C, N);
+    VectorAdd <<< blocksPerGrid, threadsPerBlock >>> (pDeviceA, pDeviceB, pDeviceC, N);
+    RUNTIME_API_CALL(cudaGetLastError());
 
-    // Copy result from device memory to host memory
-    // h_C contains the result in host memory
-    RUNTIME_API_CALL(cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost));
+    // Copy result from device memory to host memory.
+    // pHostC contains the result in host memory.
+    RUNTIME_API_CALL(cudaMemcpy(pHostC, pDeviceC, size, cudaMemcpyDeviceToHost));
 
-    // Verify result
+    // Verify result.
     for (i = 0; i < N; ++i)
     {
-        sum = h_A[i] + h_B[i];
-        if (h_C[i] != sum)
+        sum = pHostA[i] + pHostB[i];
+        if (pHostC[i] != sum)
         {
-            fprintf(stderr, "error: result verification failed\n");
+            fprintf(stderr, "Error: result verification failed\n");
             exit(EXIT_FAILURE);
         }
     }
 
-    cleanUp(h_A, h_B, h_C, d_A, d_B, d_C);
+    CleanUp(pHostA, pHostB, pHostC, pDeviceA, pDeviceB, pDeviceC);
 }
 
-int main(int argc, char* argv[])
+int
+main(
+    int argc,
+    char *argv[])
 {
     CUdevice cuDevice = 0;
     int deviceCount, deviceNum = 0;
@@ -372,7 +402,7 @@ int main(int argc, char* argv[])
     DRIVER_API_CALL(cuDeviceGetCount(&deviceCount));
     if (deviceCount == 0)
     {
-        printf("There is no device supporting CUDA.\n");
+        printf("Warning: There is no device supporting CUDA.\nWaiving test.\n");
         exit(EXIT_WAIVED);
     }
 
@@ -382,7 +412,7 @@ int main(int argc, char* argv[])
     DRIVER_API_CALL(cuDeviceGetAttribute(&computeCapabilityMinor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, cuDevice));
     printf("Compute Capability of Device: %d.%d\n", computeCapabilityMajor, computeCapabilityMinor);
 
-    // Initialize profiler API support and test device compatibility
+    // Initialize profiler API support and test device compatibility.
     CUpti_Profiler_Initialize_Params profilerInitializeParams = {CUpti_Profiler_Initialize_Params_STRUCT_SIZE};
     CUPTI_API_CALL(cuptiProfilerInitialize(&profilerInitializeParams));
     CUpti_Profiler_DeviceSupported_Params params = { CUpti_Profiler_DeviceSupported_Params_STRUCT_SIZE };
@@ -421,10 +451,15 @@ int main(int argc, char* argv[])
         {
             ::std::cerr << "\tNVIDIA Crypto Mining Processors (CMP) are not supported" << ::std::endl;
         }
+
+        if (params.wsl == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tWSL is not supported" << ::std::endl;
+        }
         exit(EXIT_WAIVED);
     }
 
-    ProfilingData_t* profilingData = new ProfilingData_t();
+    ProfilingData *pProfilingData = new ProfilingData();
     for (int i = 1; i < argc; ++i)
     {
         char* arg = argv[i];
@@ -445,7 +480,7 @@ int main(int argc, char* argv[])
             char* metricName = strtok(argv[i + 1], ",");
             while (metricName != NULL)
             {
-                profilingData->metricNames.push_back(metricName);
+                pProfilingData->metricNames.push_back(metricName);
                 metricName = strtok(NULL, ",");
             }
             i++;
@@ -453,17 +488,22 @@ int main(int argc, char* argv[])
         else if (strcmp(arg, "--numRanges") == 0 || strcmp(arg, "-n") == 0)
         {
             int numRanges = atoi(argv[i + 1]);
-            profilingData->numRanges = numRanges;
+            pProfilingData->numRanges = numRanges;
             i++;
         }
         else if (strcmp(arg, "--replayMode") == 0 || strcmp(arg, "-r") == 0)
         {
             std::string replayMode(argv[i + 1]);
             if (replayMode == "kernel")
-                profilingData->profilerReplayMode = CUPTI_KernelReplay;
+            {
+                pProfilingData->profilerReplayMode = CUPTI_KernelReplay;
+            }
             else if (replayMode == "user")
-                profilingData->profilerReplayMode = CUPTI_UserReplay;
-            else {
+            {
+                pProfilingData->profilerReplayMode = CUPTI_UserReplay;
+            }
+            else
+            {
                 printf("Invalid --replayMode argument supported replayMode type 'kernel' or 'user'\n");
                 exit(EXIT_FAILURE);
             }
@@ -472,45 +512,49 @@ int main(int argc, char* argv[])
         else if (strcmp(arg, "--outputCounterData") == 0 || strcmp(arg, "-o") == 0)
         {
             std::string outputCounterData(argv[i + 1]);
-            profilingData->CounterDataFileName = outputCounterData;
-            profilingData->CounterDataSBFileName = outputCounterData + "SB";
+            pProfilingData->counterDataFileName = outputCounterData;
+            pProfilingData->counterDataSBFileName = outputCounterData + "SB";
             i++;
         }
-        else {
+        else
+        {
             printf("Error!! Invalid Arguments\n");
             printf("Usage: %s -d [device_num] -m [metric_names comma separated] -n [num of ranges] -r [kernel or user] -o [counterdata filename]\n", argv[0]);
             exit(EXIT_FAILURE);
         }
     }
 
-    if (profilingData->metricNames.empty())
-        profilingData->metricNames.push_back(METRIC_NAME);
+    if (pProfilingData->metricNames.empty())
+    {
+        pProfilingData->metricNames.push_back(METRIC_NAME);
+    }
 
     CUpti_Device_GetChipName_Params getChipNameParams = { CUpti_Device_GetChipName_Params_STRUCT_SIZE };
     getChipNameParams.deviceIndex = deviceNum;
     CUPTI_API_CALL(cuptiDeviceGetChipName(&getChipNameParams));
-    profilingData->chipName = getChipNameParams.pChipName;
+    pProfilingData->chipName = getChipNameParams.pChipName;
 
     CUpti_SubscriberHandle subscriber;
-    CUPTI_API_CALL(cuptiSubscribe(&subscriber, (CUpti_CallbackFunc)callbackHandler, profilingData));
+    CUPTI_API_CALL(cuptiSubscribe(&subscriber, (CUpti_CallbackFunc)ProfilingCallbackHandler, pProfilingData));
     CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_CONTEXT_CREATED));
     CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel));
 
     do
     {
-        VectorAdd();
+        DoVectorAddition();
     }
-    while (!profilingData->allPassesSubmitted);
+    while (!pProfilingData->allPassesSubmitted);
 
-    if (profilingData->bProfiling)
+    if (pProfilingData->bProfiling)
     {
-        stopProfiling(profilingData);
-        profilingData->bProfiling = false;
+        StopProfiling(pProfilingData);
+        pProfilingData->bProfiling = false;
 
-        /* Evaluation of metrics collected in counterDataImage, this can also be done offline*/
-        NV::Metric::Eval::PrintMetricValues(profilingData->chipName, profilingData->counterDataImage, profilingData->metricNames);
+        // Evaluation of metrics collected in counterDataImage, this can also be done offline.
+        NV::Metric::Eval::PrintMetricValues(pProfilingData->chipName, pProfilingData->counterDataImage, pProfilingData->metricNames);
     }
 
-    delete profilingData;
+    delete pProfilingData;
+
     exit(EXIT_SUCCESS);
 }

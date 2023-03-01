@@ -25,6 +25,8 @@ else
     LIB_PATH ?= "$(CUDA_INSTALL_PATH)/lib64"
 endif
 
+INCLUDES += -I../common
+
 LIBS :=
 ifeq ($(HOST_ARCH), $(TARGET_ARCH))
     LIBS = -L $(EXTRAS_LIB_PATH)
@@ -55,8 +57,8 @@ endif
 
 FINALIZE_LIB = libCuptiFinalize.so
 
-cupti_finalize: libinject.cpp
+cupti_finalize: cupti_finalize.cpp
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(INCLUDES) -o $(FINALIZE_LIB) -Xcompiler -fPIC -shared $< $(LIBS)
 	$(info export CUDA_INJECTION64_PATH=<full_path>/libCuptiFinalize.so and run any CUDA sample with runtime more than 10 seconds(Graphics/Simulations samples) for demonstration)
 clean:
-	rm -f $(FINALIZE_LIB) libinject.o
+	rm -f $(FINALIZE_LIB) cupti_finalize.o

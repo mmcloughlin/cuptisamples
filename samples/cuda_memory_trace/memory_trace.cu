@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 NVIDIA Corporation. All rights reserved
+ * Copyright 2021-2022 NVIDIA Corporation. All rights reserved
  *
  * Sample CUPTI app to print trace of CUDA memory operations.
  * The sample also traces CUDA memory operations done via
@@ -7,136 +7,167 @@
  *
  */
 
+// System headers
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+// CUDA headers
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include <stdlib.h>
 
-#ifndef EXIT_WAIVED
-#define EXIT_WAIVED 2
-#endif
+// CUPTI headers
+#include "helper_cupti_activity.h"
 
-#define DRIVER_API_CALL(apiFuncCall)                                                \
-    do {                                                                            \
-        CUresult _status = apiFuncCall;                                             \
-        if (_status != CUDA_SUCCESS) {                                              \
-            const char* errstr;                                                     \
-            cuGetErrorString(_status, &errstr);                                     \
-            fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",    \
-                    __FILE__, __LINE__, #apiFuncCall, errstr);                      \
-            exit(EXIT_FAILURE);                                                      \
-        }                                                                           \
-    } while (0)
-
-#define RUNTIME_API_CALL(apiFuncCall)                                               \
-    do {                                                                            \
-        cudaError_t _status = apiFuncCall;                                          \
-        if (_status != cudaSuccess) {                                               \
-            fprintf(stderr, "%s:%d: error: function %s failed with error %s.\n",    \
-                    __FILE__, __LINE__, #apiFuncCall, cudaGetErrorString(_status)); \
-            exit(EXIT_FAILURE);                                                     \
-        }                                                                           \
-    } while (0)
-
-extern void initTrace(void);
-extern void finiTrace(void);
-
-__global__ void vectorAddGPU(const float *a, const float *b, float *c, int N)
+// Kernels
+__global__ void
+VectorAdd(
+    const float *pA,
+    const float *pB,
+    float *pC,
+    int N)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (idx < N) {
-        c[idx] = a[idx] + b[idx];
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < N)
+    {
+        pC[i] = pA[i] + pB[i];
     }
 }
 
+// Functions
 static void
-memoryAllocations()
+DoMemoryAllocations()
 {
-    int nelem = 1048576;
-    size_t size = nelem * sizeof(int);
+    cudaDeviceProp deviceProperties;
+    RUNTIME_API_CALL(cudaGetDeviceProperties(&deviceProperties, 0));
 
-    int *h_A, *h_B;
-    int *d_A, *d_B;
-
-    // Allocate memory
-    RUNTIME_API_CALL(cudaMallocHost((void**)&h_A, size));
-    RUNTIME_API_CALL(cudaHostAlloc((void**)&h_B, size, cudaHostAllocPortable));
-    RUNTIME_API_CALL(cudaMalloc((void**)&d_A, size));
-    RUNTIME_API_CALL(cudaMallocManaged((void**)&d_B, size, cudaMemAttachGlobal));
-
-    // Free the allocated memory
-    RUNTIME_API_CALL(cudaFreeHost(h_A));
-    RUNTIME_API_CALL(cudaFreeHost(h_B));
-    RUNTIME_API_CALL(cudaFree(d_A));
-    RUNTIME_API_CALL(cudaFree(d_B));
-}
-
-static void
-memoryAllocationsViaMemoryPool()
-{
-    int nelem = 1048576;
-    size_t bytes = nelem * sizeof(float);
-
-    float *a, *b, *c;
-    float *d_A, *d_B, *d_C;
-    cudaStream_t stream;
-
-    int isMemPoolSupported = 0;
-    cudaError_t status = cudaSuccess;
-    status = cudaDeviceGetAttribute(&isMemPoolSupported, cudaDevAttrMemoryPoolsSupported, 0);
-    // For enhance compatibility cases, the attribute cudaDevAttrMemoryPoolsSupported might not be present
-    // return early if Runtime API does not return cudaSuccess
-    if (!isMemPoolSupported || status != cudaSuccess) {
-        printf("Warning: Waiving execution of memory operations via memory pool as device does not support memory pools.\n");
+    if (!deviceProperties.managedMemory)
+    {
+        // This samples requires being run on a device that supports Unified Memory.
+        printf("Warning: Unified Memory not supported on this device. Waiving sample.\n");
         return;
     }
 
-    // Allocate and initialize memory on host and device
-    a = (float*) malloc(bytes);
-    b = (float*) malloc(bytes);
-    c = (float*) malloc(bytes);
+    int nElements = 1048576;
+    size_t size = nElements * sizeof(int);
 
-    for (int n = 0; n < nelem; n++) {
-        a[n] = rand() / (float)RAND_MAX;
-        b[n] = rand() / (float)RAND_MAX;
+    int *pHostA, *pHostB;
+    int *pDeviceA, *pDeviceB;
+
+    // Allocate memory.
+    RUNTIME_API_CALL(cudaMallocHost((void **)&pHostA, size));
+    RUNTIME_API_CALL(cudaHostAlloc((void **)&pHostB, size, cudaHostAllocPortable));
+    RUNTIME_API_CALL(cudaMalloc((void **)&pDeviceA, size));
+    RUNTIME_API_CALL(cudaMallocManaged((void **)&pDeviceB, size, cudaMemAttachGlobal));
+
+    // Free the allocated memory.
+    RUNTIME_API_CALL(cudaFreeHost(pHostA));
+    RUNTIME_API_CALL(cudaFreeHost(pHostB));
+    RUNTIME_API_CALL(cudaFree(pDeviceA));
+    RUNTIME_API_CALL(cudaFree(pDeviceB));
+}
+
+static void
+DoMemoryAllocationsViaMemoryPool()
+{
+    int nElements = 1048576;
+    size_t bytes = nElements * sizeof(float);
+
+    float *pHostA, *pHostB, *pHostC;
+    float *pDeviceA, *pDeviceB, *pDeviceC;
+    cudaStream_t stream;
+
+    int isMemPoolSupported = 0;
+    cudaError_t cudaStatus = cudaSuccess;
+    cudaStatus = cudaDeviceGetAttribute(&isMemPoolSupported, cudaDevAttrMemoryPoolsSupported, 0);
+    // For enhance compatibility cases, the attribute cudaDevAttrMemoryPoolsSupported might not be present.
+    // return early if Runtime API does not return cudaSuccess.
+    if (!isMemPoolSupported || cudaStatus != cudaSuccess)
+    {
+        printf("Warning: Memory pool not supported on this device. Waiving sample.\n");
+        return;
+    }
+
+    // Allocate and initialize memory on host and device.
+    pHostA = (float*) malloc(bytes);
+    MEMORY_ALLOCATION_CALL(pHostA);
+
+    pHostB = (float*) malloc(bytes);
+    MEMORY_ALLOCATION_CALL(pHostB);
+
+    pHostC = (float*) malloc(bytes);
+    MEMORY_ALLOCATION_CALL(pHostC);
+
+    for (int n = 0; n < nElements; n++)
+    {
+        pHostA[n] = rand() / (float)RAND_MAX;
+        pHostB[n] = rand() / (float)RAND_MAX;
     }
 
     RUNTIME_API_CALL(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
 
-    // Allocate memory using default memory pool
-    RUNTIME_API_CALL(cudaMallocAsync(&d_A, bytes, stream));
-    RUNTIME_API_CALL(cudaMallocAsync(&d_B, bytes, stream));
-    RUNTIME_API_CALL(cudaMallocAsync(&d_C, bytes, stream));
-    RUNTIME_API_CALL(cudaMemcpyAsync(d_A, a, bytes, cudaMemcpyHostToDevice, stream));
-    RUNTIME_API_CALL(cudaMemcpyAsync(d_B, b, bytes, cudaMemcpyHostToDevice, stream));
+    // Allocate memory using default memory pool.
+    RUNTIME_API_CALL(cudaMallocAsync(&pDeviceA, bytes, stream));
+    RUNTIME_API_CALL(cudaMallocAsync(&pDeviceB, bytes, stream));
+    RUNTIME_API_CALL(cudaMallocAsync(&pDeviceC, bytes, stream));
+    RUNTIME_API_CALL(cudaMemcpyAsync(pDeviceA, pHostA, bytes, cudaMemcpyHostToDevice, stream));
+    RUNTIME_API_CALL(cudaMemcpyAsync(pDeviceB, pHostB, bytes, cudaMemcpyHostToDevice, stream));
 
     dim3 block(256);
-    dim3 grid((unsigned int)ceil(nelem/(float)block.x));
-    vectorAddGPU <<< grid, block, 0, stream >>>(d_A, d_B, d_C, nelem);
+    dim3 grid((unsigned int)ceil(nElements/(float)block.x));
+    VectorAdd<<<grid, block, 0, stream>>>(pDeviceA, pDeviceB, pDeviceC, nElements);
 
-    // Free the allocated memory
-    RUNTIME_API_CALL(cudaFreeAsync(d_A, stream));
-    RUNTIME_API_CALL(cudaFreeAsync(d_B, stream));
-    RUNTIME_API_CALL(cudaMemcpyAsync(c, d_C, bytes, cudaMemcpyDeviceToHost, stream));
-    RUNTIME_API_CALL(cudaFree(d_C));
+    // Free the allocated memory.
+    RUNTIME_API_CALL(cudaFreeAsync(pDeviceA, stream));
+    RUNTIME_API_CALL(cudaFreeAsync(pDeviceB, stream));
+    RUNTIME_API_CALL(cudaMemcpyAsync(pHostC, pDeviceC, bytes, cudaMemcpyDeviceToHost, stream));
+    RUNTIME_API_CALL(cudaFree(pDeviceC));
 
     RUNTIME_API_CALL(cudaStreamSynchronize(stream));
     RUNTIME_API_CALL(cudaStreamDestroy(stream));
 
-    free(a);
-    free(b);
-    free(c);
+    // Free host memory.
+    if (pHostA)
+    {
+        free(pHostA);
+    }
+    if (pHostB)
+    {
+        free(pHostB);
+    }
+    if (pHostC)
+    {
+        free(pHostC);
+    }
+}
+
+static void
+SetupCupti()
+{
+    UserData *pUserData = (UserData *)malloc(sizeof(UserData));
+    MEMORY_ALLOCATION_CALL(pUserData);
+
+    memset(pUserData, 0, sizeof(UserData));
+    pUserData->pPostProcessActivityRecords = NULL;
+    pUserData->printActivityRecords        = 1;
+
+    // Common CUPTI Initialization
+    InitCuptiTrace(pUserData, NULL, stdout);
+
+    // Enable CUPTI activities related to memory allocation
+    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMORY2));
+    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMORY_POOL));
+
 }
 
 int
-main(int argc, char *argv[])
+main(
+    int argc,
+    char *argv[])
 {
-    // Initialize CUPTI
-    initTrace();
+    SetupCupti();
 
-    // Initialize CUDA
+    // Intialize CUDA.
     DRIVER_API_CALL(cuInit(0));
 
     char deviceName[256];
@@ -146,12 +177,10 @@ main(int argc, char *argv[])
     printf("Device Name: %s\n", deviceName);
     RUNTIME_API_CALL(cudaSetDevice(0));
 
-    memoryAllocations();
-    memoryAllocationsViaMemoryPool();
+    DoMemoryAllocations();
+    DoMemoryAllocationsViaMemoryPool();
 
-    // Flush CUPTI activity buffers
-    finiTrace();
+    DeInitCuptiTrace();
 
     exit(EXIT_SUCCESS);
 }
-

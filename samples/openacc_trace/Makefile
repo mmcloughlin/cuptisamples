@@ -16,7 +16,7 @@ OPENACC_INCLUDE_PATH =
 
 HOST_ARCH := $(shell uname -m)
 
-INCLUDES += -I../../include
+INCLUDES += -I../../include -I../common
 INCLUDES += -I"$(CUDA_INSTALL_PATH)/include"
 INCLUDES += -I$(OPENACC_INCLUDE_PATH)
 

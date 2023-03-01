@@ -9,7 +9,7 @@ endif
 CUDA_INSTALL_PATH ?= ../../../..
 PROFILER_HOST_UTILS_SRC ?= ../extensions/src/profilerhost_util
 NVCC := "$(CUDA_INSTALL_PATH)/bin/nvcc"
-INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I../extensions/include/profilerhost_util -I../extensions/include/c_util
+INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I../extensions/include/profilerhost_util -I../extensions/include/c_util -I../common
 
 TARGET_ARCH ?= $(HOST_ARCH)
 TARGET_OS ?= $(shell uname | tr A-Z a-z)
@@ -85,7 +85,7 @@ $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_
 .DEFAULT: all
 .PHONY: all
 
-all: simple_target complex_target profiler_host_util libinjection_1.so libinjection_2.so
+all: simple_target complex_target profiler_host_util libinjection.so
 
 profiler_host_util:
 	cd $(PROFILER_HOST_UTILS_SRC) && $(MAKE)
@@ -96,12 +96,9 @@ simple_target: simple_target.cu
 complex_target: complex_target.cu
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ $^ $(INCLUDES) -lcuda $(GENCODE_FLAGS)
 
-libinjection_1.so: injection_1.cpp
-	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ $< $(INCLUDES) -Ldl -Xcompiler -fPIC --shared
-
-libinjection_2.so: injection_2.cpp
+libinjection.so: injection.cpp
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ $< $(INCLUDES) $(LIBS) -Ldl -Xcompiler -fPIC --shared
 
 .PHONY: clean
 clean:
-	rm -f simple_target simple_target.$(OBJ) complex_target complex_target.$(OBJ) libinjection_1.so libinjection_2.so
+	rm -f simple_target simple_target.$(OBJ) complex_target complex_target.$(OBJ) libinjection.so
