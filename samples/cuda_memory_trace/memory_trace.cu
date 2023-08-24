@@ -121,9 +121,10 @@ DoMemoryAllocationsViaMemoryPool()
     RUNTIME_API_CALL(cudaFreeAsync(pDeviceA, stream));
     RUNTIME_API_CALL(cudaFreeAsync(pDeviceB, stream));
     RUNTIME_API_CALL(cudaMemcpyAsync(pHostC, pDeviceC, bytes, cudaMemcpyDeviceToHost, stream));
-    RUNTIME_API_CALL(cudaFree(pDeviceC));
 
     RUNTIME_API_CALL(cudaStreamSynchronize(stream));
+    RUNTIME_API_CALL(cudaFree(pDeviceC));
+
     RUNTIME_API_CALL(cudaStreamDestroy(stream));
 
     // Free host memory.

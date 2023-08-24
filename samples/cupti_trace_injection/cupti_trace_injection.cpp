@@ -319,6 +319,9 @@ InjectionCallbackHandler(
 
     switch (domain)
     {
+        case CUPTI_CB_DOMAIN_STATE:
+            HandleDomainStateCallback(callbackId, (CUpti_StateData *)pCallbackData);
+            break;
         case CUPTI_CB_DOMAIN_DRIVER_API:
         {
             switch (callbackId)

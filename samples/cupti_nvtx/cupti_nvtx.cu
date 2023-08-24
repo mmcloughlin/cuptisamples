@@ -222,30 +222,42 @@ NvtxCallback(
     CUpti_CallbackId callbackId,
     const void *pCallbackData)
 {
-    // Commented the NVTX code to avoid warnings for unused varaibles.
-    // CUpti_NvtxData* pNvtxData = (CUpti_NvtxData*)pCallbackData;
+    // Check last error.
+    CUPTI_API_CALL(cuptiGetLastError());
 
-    switch (callbackId) {
-        case CUPTI_CBID_NVTX_nvtxDomainCreateA:
-        {
-            // Get the parameters passed to the NVTX function.
-            // nvtxDomainCreateA_params* params = (nvtxDomainCreateA_params*)pNvtxData->functionParams;
-            // Get the return value of the NVTX function.
-            // nvtxDomainHandle_t* domainHandle = (nvtxDomainHandle_t*)pNvtxData->functionReturnValue;
+    switch (domain)
+    {
+        case CUPTI_CB_DOMAIN_STATE:
+            HandleDomainStateCallback(callbackId, (CUpti_StateData *)pCallbackData);
             break;
-        }
-        case CUPTI_CBID_NVTX_nvtxMarkEx:
-        {
-            // nvtxMarkEx_params* params = (nvtxMarkEx_params*)pNvtxData->functionParams;
-            break;
-        }
-        case CUPTI_CBID_NVTX_nvtxDomainMarkEx:
-        {
-            // nvtxDomainMarkEx_params* params = (nvtxDomainMarkEx_params*)pNvtxData->functionParams;
-            break;
-        }
-        // Add more NVTX callbacks, refer "generated_nvtx_meta.h" for all NVTX callbacks.
-        // If there is no return value for the NVTX function, functionReturnValue is NULL.
+        case CUPTI_CB_DOMAIN_NVTX:
+            // Commented the NVTX code to avoid warnings for unused varaibles.
+            // CUpti_NvtxData* pNvtxData = (CUpti_NvtxData*)pCallbackData;
+
+            switch (callbackId) {
+                case CUPTI_CBID_NVTX_nvtxDomainCreateA:
+                {
+                    // Get the parameters passed to the NVTX function.
+                    // nvtxDomainCreateA_params* params = (nvtxDomainCreateA_params*)pNvtxData->functionParams;
+                    // Get the return value of the NVTX function.
+                    // nvtxDomainHandle_t* domainHandle = (nvtxDomainHandle_t*)pNvtxData->functionReturnValue;
+                    break;
+                }
+                case CUPTI_CBID_NVTX_nvtxMarkEx:
+                {
+                    // nvtxMarkEx_params* params = (nvtxMarkEx_params*)pNvtxData->functionParams;
+                    break;
+                }
+                case CUPTI_CBID_NVTX_nvtxDomainMarkEx:
+                {
+                    // nvtxDomainMarkEx_params* params = (nvtxDomainMarkEx_params*)pNvtxData->functionParams;
+                    break;
+                }
+                // Add more NVTX callbacks, refer "generated_nvtx_meta.h" for all NVTX callbacks.
+                // If there is no return value for the NVTX function, functionReturnValue is NULL.
+                default:
+                    break;
+            }
         default:
             break;
     }

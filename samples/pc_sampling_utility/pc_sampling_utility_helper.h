@@ -474,9 +474,9 @@ SourceCorrelation(
                   << ", Count of PC records: " << pPcSampDataBuffer[pcSampBufferIndex].totalNumPcs
                   << ", Total Samples: " << pPcSampDataBuffer[pcSampBufferIndex].totalSamples
                   << ", Total Dropped Samples: " << pPcSampDataBuffer[pcSampBufferIndex].droppedSamples;
-        if (CHECK_PC_SAMPLING_STRUCT_FIELD_EXISTS(CUpti_PCSamplingData, nonUsrKernelsTotalSamples, buffersRetrievedDataVector[pcSampBufferIndex].size))
+        if (CHECK_PC_SAMPLING_STRUCT_FIELD_EXISTS(CUpti_PCSamplingData, nonUsrKernelsTotalSamples, pPcSampDataBuffer[pcSampBufferIndex].size))
         {
-            std::cout << ", Non User Kernels Total Samples: " << buffersRetrievedDataVector[pcSampBufferIndex].nonUsrKernelsTotalSamples;
+            std::cout << ", Non User Kernels Total Samples: " << pPcSampDataBuffer[pcSampBufferIndex].nonUsrKernelsTotalSamples;
         }
         std::cout << std::endl;
 

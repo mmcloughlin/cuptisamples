@@ -104,14 +104,21 @@ TraceCallback(
     void *pUserData,
     CUpti_CallbackDomain domain,
     CUpti_CallbackId callbackId,
-    const void *CallbackData)
+    const void *pCallbackData)
 {
     // Check last error.
     CUPTI_API_CALL(cuptiGetLastError());
 
-    if (domain == CUPTI_CB_DOMAIN_RESOURCE)
+    switch (domain)
     {
-        HandleResource(callbackId, (CUpti_ResourceData *)CallbackData);
+        case CUPTI_CB_DOMAIN_STATE:
+            HandleDomainStateCallback(callbackId, (CUpti_StateData *)pCallbackData);
+            break;
+        case CUPTI_CB_DOMAIN_RESOURCE:
+            HandleResource(callbackId, (CUpti_ResourceData *)pCallbackData);
+            break;
+        default:
+            break;
     }
 }
 

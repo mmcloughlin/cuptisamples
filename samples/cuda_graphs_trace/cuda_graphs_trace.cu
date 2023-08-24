@@ -219,6 +219,9 @@ GraphsCallbackHandler(
 
     switch (domain)
     {
+        case CUPTI_CB_DOMAIN_STATE:
+            HandleDomainStateCallback(callbackId, (CUpti_StateData *)pCallbackInfo);
+            break;
         case CUPTI_CB_DOMAIN_RESOURCE:
         {
             CUpti_ResourceData *pResourceData = (CUpti_ResourceData *)pCallbackInfo;

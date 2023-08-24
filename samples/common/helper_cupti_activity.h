@@ -182,6 +182,231 @@ GetActivityKindString(
     }
 }
 
+CUpti_ActivityKind
+GetActivityKindFromString(
+    const char *pActivityKindString)
+{
+    if (!pActivityKindString)
+    {
+        printf("\nError: NULL string.");
+        exit(-1);
+    }
+
+    if (!stricmp(pActivityKindString, "MEMCPY"))
+    {
+        return CUPTI_ACTIVITY_KIND_MEMCPY;
+    }
+    else if (!stricmp(pActivityKindString, "MEMSET"))
+    {
+        return CUPTI_ACTIVITY_KIND_MEMSET;
+    }
+    else if (!stricmp(pActivityKindString, "KERNEL"))
+    {
+        return CUPTI_ACTIVITY_KIND_KERNEL;
+    }
+    else if (!stricmp(pActivityKindString, "DRIVER"))
+    {
+        return CUPTI_ACTIVITY_KIND_DRIVER;
+    }
+    else if (!stricmp(pActivityKindString, "RUNTIME"))
+    {
+        return CUPTI_ACTIVITY_KIND_RUNTIME;
+    }
+    else if (!stricmp(pActivityKindString, "EVENT"))
+    {
+        return CUPTI_ACTIVITY_KIND_EVENT;
+    }
+    else if (!stricmp(pActivityKindString, "METRIC"))
+    {
+        return CUPTI_ACTIVITY_KIND_METRIC;
+    }
+    else if (!stricmp(pActivityKindString, "DEVICE"))
+    {
+        return CUPTI_ACTIVITY_KIND_DEVICE;
+    }
+    else if (!stricmp(pActivityKindString, "CONTEXT"))
+    {
+        return CUPTI_ACTIVITY_KIND_CONTEXT;
+    }
+    else if (!stricmp(pActivityKindString, "CONCURRENT_KERNEL"))
+    {
+        return CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL;
+    }
+    else if (!stricmp(pActivityKindString, "NAME"))
+    {
+        return CUPTI_ACTIVITY_KIND_NAME;
+    }
+    else if (!stricmp(pActivityKindString, "MARKER"))
+    {
+        return CUPTI_ACTIVITY_KIND_MARKER;
+    }
+    else if (!stricmp(pActivityKindString, "MARKER_DATA"))
+    {
+        return CUPTI_ACTIVITY_KIND_MARKER_DATA;
+    }
+    else if (!stricmp(pActivityKindString, "SOURCE_LOCATOR"))
+    {
+        return CUPTI_ACTIVITY_KIND_SOURCE_LOCATOR;
+    }
+    else if (!stricmp(pActivityKindString, "GLOBAL_ACCESS"))
+    {
+        return CUPTI_ACTIVITY_KIND_GLOBAL_ACCESS;
+    }
+    else if (!stricmp(pActivityKindString, "BRANCH"))
+    {
+        return CUPTI_ACTIVITY_KIND_BRANCH;
+    }
+    else if (!stricmp(pActivityKindString, "OVERHEAD"))
+    {
+        return CUPTI_ACTIVITY_KIND_OVERHEAD;
+    }
+    else if (!stricmp(pActivityKindString, "CDP_KERNEL"))
+    {
+        return CUPTI_ACTIVITY_KIND_CDP_KERNEL;
+    }
+    else if (!stricmp(pActivityKindString, "PREEMPTION"))
+    {
+        return CUPTI_ACTIVITY_KIND_PREEMPTION;
+    }
+    else if (!stricmp(pActivityKindString, "ENVIRONMENT"))
+    {
+        return CUPTI_ACTIVITY_KIND_ENVIRONMENT;
+    }
+    else if (!stricmp(pActivityKindString, "EVENT_INSTANCE"))
+    {
+        return CUPTI_ACTIVITY_KIND_EVENT_INSTANCE;
+    }
+    else if (!stricmp(pActivityKindString, "MEMCPY2"))
+    {
+        return CUPTI_ACTIVITY_KIND_MEMCPY2;
+    }
+    else if (!stricmp(pActivityKindString, "METRIC_INSTANCE"))
+    {
+        return CUPTI_ACTIVITY_KIND_METRIC_INSTANCE;
+    }
+    else if (!stricmp(pActivityKindString, "INSTRUCTION_EXECUTION"))
+    {
+        return CUPTI_ACTIVITY_KIND_INSTRUCTION_EXECUTION;
+    }
+    else if (!stricmp(pActivityKindString, "UNIFIED_MEMORY_COUNTER"))
+    {
+        return CUPTI_ACTIVITY_KIND_UNIFIED_MEMORY_COUNTER;
+    }
+    else if (!stricmp(pActivityKindString, "FUNCTION"))
+    {
+        return CUPTI_ACTIVITY_KIND_FUNCTION;
+    }
+    else if (!stricmp(pActivityKindString, "MODULE"))
+    {
+        return CUPTI_ACTIVITY_KIND_MODULE;
+    }
+    else if (!stricmp(pActivityKindString, "DEVICE_ATTRIBUTE"))
+    {
+        return CUPTI_ACTIVITY_KIND_DEVICE_ATTRIBUTE;
+    }
+    else if (!stricmp(pActivityKindString, "SHARED_ACCESS"))
+    {
+        return CUPTI_ACTIVITY_KIND_SHARED_ACCESS;
+    }
+    else if (!stricmp(pActivityKindString, "PC_SAMPLING"))
+    {
+        return CUPTI_ACTIVITY_KIND_PC_SAMPLING;
+    }
+    else if (!stricmp(pActivityKindString, "PC_SAMPLING_RECORD_INFO"))
+    {
+        return CUPTI_ACTIVITY_KIND_PC_SAMPLING_RECORD_INFO;
+    }
+    else if (!stricmp(pActivityKindString, "INSTRUCTION_CORRELATION"))
+    {
+        return CUPTI_ACTIVITY_KIND_INSTRUCTION_CORRELATION;
+    }
+    else if (!stricmp(pActivityKindString, "OPENACC_DATA"))
+    {
+        return CUPTI_ACTIVITY_KIND_OPENACC_DATA;
+    }
+    else if (!stricmp(pActivityKindString, "OPENACC_LAUNCH"))
+    {
+        return CUPTI_ACTIVITY_KIND_OPENACC_LAUNCH;
+    }
+    else if (!stricmp(pActivityKindString, "OPENACC_OTHER"))
+    {
+        return CUPTI_ACTIVITY_KIND_OPENACC_OTHER;
+    }
+    else if (!stricmp(pActivityKindString, "CUDA_EVENT"))
+    {
+        return CUPTI_ACTIVITY_KIND_CUDA_EVENT;
+    }
+    else if (!stricmp(pActivityKindString, "STREAM"))
+    {
+        return CUPTI_ACTIVITY_KIND_STREAM;
+    }
+    else if (!stricmp(pActivityKindString, "SYNCHRONIZATION"))
+    {
+        return CUPTI_ACTIVITY_KIND_SYNCHRONIZATION;
+    }
+    else if (!stricmp(pActivityKindString, "EXTERNAL_CORRELATION"))
+    {
+        return CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION;
+    }
+    else if (!stricmp(pActivityKindString, "NVLINK"))
+    {
+        return CUPTI_ACTIVITY_KIND_NVLINK;
+    }
+    else if (!stricmp(pActivityKindString, "INSTANTANEOUS_EVENT"))
+    {
+        return CUPTI_ACTIVITY_KIND_INSTANTANEOUS_EVENT;
+    }
+    else if (!stricmp(pActivityKindString, "INSTANTANEOUS_EVENT_INSTANCE"))
+    {
+        return CUPTI_ACTIVITY_KIND_INSTANTANEOUS_EVENT_INSTANCE;
+    }
+    else if (!stricmp(pActivityKindString, "INSTANTANEOUS_METRIC"))
+    {
+        return CUPTI_ACTIVITY_KIND_INSTANTANEOUS_METRIC;
+    }
+    else if (!stricmp(pActivityKindString, "INSTANTANEOUS_METRIC_INSTANCE"))
+    {
+        return CUPTI_ACTIVITY_KIND_INSTANTANEOUS_METRIC_INSTANCE;
+    }
+    else if (!stricmp(pActivityKindString, "MEMORY"))
+    {
+        return CUPTI_ACTIVITY_KIND_MEMORY;
+    }
+    else if (!stricmp(pActivityKindString, "PCIE"))
+    {
+        return CUPTI_ACTIVITY_KIND_PCIE;
+    }
+    else if (!stricmp(pActivityKindString, "OPENMP"))
+    {
+        return CUPTI_ACTIVITY_KIND_OPENMP;
+    }
+    else if (!stricmp(pActivityKindString, "INTERNAL_LAUNCH_API"))
+    {
+        return CUPTI_ACTIVITY_KIND_INTERNAL_LAUNCH_API;
+    }
+    else if (!stricmp(pActivityKindString, "MEMORY2"))
+    {
+        return CUPTI_ACTIVITY_KIND_MEMORY2;
+    }
+    else if (!stricmp(pActivityKindString, "MEMORY_POOL"))
+    {
+        return CUPTI_ACTIVITY_KIND_MEMORY_POOL;
+    }
+    else if (!stricmp(pActivityKindString, "GRAPH_TRACE"))
+    {
+        return CUPTI_ACTIVITY_KIND_GRAPH_TRACE;
+    }
+    else if (!stricmp(pActivityKindString, "JIT"))
+    {
+        return CUPTI_ACTIVITY_KIND_JIT;
+    }
+    else {
+        printf("Error: Invalid string %s cannot be converted to CUPTI Activity Kind.", pActivityKindString);
+        exit(-1);
+    }
+}
+
+
 
 static const char *
 GetActivityObjectKindString(
@@ -1002,7 +1227,7 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_DEVICE:
         {
-            CUpti_ActivityDevice4 *pDeviceRecord = (CUpti_ActivityDevice4 *)pRecord;
+            CUpti_ActivityDevice5 *pDeviceRecord = (CUpti_ActivityDevice5 *)pRecord;
 
             fprintf(pFileHandle, "%s %s [ %u ]\n",
                     GetActivityKindString(pDeviceRecord->kind),
@@ -2130,6 +2355,30 @@ HandleSyncronizationCallbacks(
     }
 }
 
+void
+HandleDomainStateCallback(
+    CUpti_CallbackId callbackId,
+    const CUpti_StateData *pStateData)
+{
+    switch (callbackId)
+    {
+        case CUPTI_CBID_STATE_FATAL_ERROR:
+        {
+            const char *errorString = NULL;
+            cuptiGetResultString(pStateData->notification.result, &errorString);
+
+            fprintf(globals.pOutputFile, "\nCUPTI encountered fatal error: %s\n", errorString);
+            fprintf(globals.pOutputFile, "Error message: %s\n", pStateData->notification.message);
+
+            // Exiting the application if fatal error encountered in CUPTI
+            // If there is a CUPTI fatal error, it means CUPTI has stopped profiling the application.
+            exit(EXIT_FAILURE);
+        }
+        default:
+            break;
+    }
+}
+
 static void CUPTIAPI
 CuptiCallbackHandler(
     void *pUserData,
@@ -2150,6 +2399,9 @@ CuptiCallbackHandler(
 
     switch (domain)
     {
+        case CUPTI_CB_DOMAIN_STATE:
+            HandleDomainStateCallback(callbackId, (CUpti_StateData *)pCallbackData);
+            break;
         case CUPTI_CB_DOMAIN_RUNTIME_API:
             switch (callbackId)
             {
@@ -2216,6 +2468,9 @@ InitCuptiTrace(
 
         // Enable CUPTI callback on CUDA device reset by default
         CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RUNTIME_API, CUPTI_RUNTIME_TRACE_CBID_cudaDeviceReset_v3020));
+
+        // Enable CUPTI callback on fatal errors by default
+        CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_STATE, CUPTI_CBID_STATE_FATAL_ERROR));
     }
 
     // Register callbacks for buffer requests and for buffers completed by CUPTI.

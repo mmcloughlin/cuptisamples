@@ -94,7 +94,17 @@ AtExitHandler(void)
     // Force flush the activity buffers.
     if (injectionGlobals.tracingEnabled)
     {
-        CUPTI_API_CALL(cuptiActivityFlushAll(1));
+        DeInitCuptiTrace();
+
+        // Release mutex lock in AtExitHandler() function
+        // Scenario: The thread initiating detach might wait for cuptiFinalize() API
+        // call to take place which will signal for the mutex release.
+        // But there are no CUDA API callbacks after the thread initiates detach.
+        // This will cause the mutex to never be released causing a hang.
+        if (injectionGlobals.detachCupti)
+        {
+            PTHREAD_CALL(pthread_cond_broadcast(&injectionGlobals.mutexCondition));
+        }
     }
 
     PTHREAD_CALL(pthread_join(injectionGlobals.dynamicThread, NULL));
@@ -116,6 +126,15 @@ InjectionCallbackHandler(
 
     // Check last error.
     CUPTI_API_CALL(cuptiGetLastError());
+
+    switch (domain)
+    {
+        case CUPTI_CB_DOMAIN_STATE:
+            HandleDomainStateCallback(callbackId, (CUpti_StateData *)pCallbackData);
+            break;
+        default:
+            break;
+    }
 
     // This code path is taken only when we wish to perform the CUPTI teardown.
     if (injectionGlobals.detachCupti)
@@ -183,7 +202,7 @@ void *DynamicAttachDetach(
             printf("\nCUPTI detach starting ...\n");
 
             // Force flush activity buffers.
-            DeInitCuptiTrace();
+            CUPTI_API_CALL(cuptiActivityFlushAll(1));
             injectionGlobals.detachCupti = 1;
 
             // Lock and wait for callbackHandler() to perform CUPTI teardown.
@@ -196,6 +215,10 @@ void *DynamicAttachDetach(
             injectionGlobals.detachCupti = 0;
             injectionGlobals.tracingEnabled = 0;
             injectionGlobals.subscriberHandle = 0;
+
+            if (globals.pUserData) {
+                free(globals.pUserData);
+            }
 
         }
         else

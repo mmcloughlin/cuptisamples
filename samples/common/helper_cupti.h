@@ -114,15 +114,17 @@ do                                                                              
     }                                                                               \
 } while (0)
 
-#define TEST_ASSERT(testValue)                                                      \
+#define CHECK_CONDITION(condition)                                                  \
 do                                                                                  \
 {                                                                                   \
-    if (!(testValue))                                                               \
+    if (!(condition))                                                               \
     {                                                                               \
-        fprintf(stderr, "%s:%d: Error: Condition " #testValue " failed.\n",         \
+        fprintf(stderr, "%s:%d: Error: Condition " #condition " failed.\n",         \
                 __FILE__, __LINE__);                                                \
+                                                                                    \
         exit(EXIT_FAILURE);                                                         \
     }                                                                               \
-} while (0)
+} while(0)
 
 #endif // HELPER_CUPTI_H_
+

@@ -56,4 +56,4 @@ all: pc_sampling_utility
 pc_sampling_utility: pc_sampling_utility.cpp
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(INCLUDES) -o pc_sampling_utility $< $(LIBS)
 clean:
-	rm pc_sampling_utility
+	rm -f pc_sampling_utility

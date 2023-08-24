@@ -18,6 +18,7 @@
 // CUPTI headers
 #include "cupti.h"
 #include "helper_cupti.h"
+#include "helper_cupti_activity.h"
 
 // Structure to hold data collected by callback.
 typedef struct RuntimeApiTrace_st
@@ -81,69 +82,83 @@ TimestampCallback(
     uint64_t endTimestamp;
     RuntimeApiTrace *pRuntimeApiTrace = (RuntimeApiTrace*)pUserdata;
 
-    // Data is collected only for the following API.
-    if ((callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunch_v3020) ||
-        (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunchKernel_v7000) ||
-        (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaDeviceSynchronize_v3020) ||
-        (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020))
+    switch(domain)
     {
-
-        // Set pointer depending on API.
-        if ((callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunch_v3020) ||
-            (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunchKernel_v7000))
-        {
-            pRuntimeApiTrace = pRuntimeApiTrace + KERNEL;
-        }
-        else if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaDeviceSynchronize_v3020)
-        {
-            pRuntimeApiTrace = pRuntimeApiTrace + THREAD_SYNC;
-        }
-        else if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020)
-        {
-            pRuntimeApiTrace = pRuntimeApiTrace + MEMCPY_H2D1 + s_MemTransCount;
-        }
-
-        if (pCallbackData->callbackSite == CUPTI_API_ENTER)
-        {
-            // For a kernel launch report the kernel name.
-            // Otherwise use the API function name.
-            if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunch_v3020 ||
-                callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunchKernel_v7000)
+        case CUPTI_CB_DOMAIN_RUNTIME_API:
+            // Data is collected only for the following API.
+            if ((callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunch_v3020) ||
+                (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunchKernel_v7000) ||
+                (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaDeviceSynchronize_v3020) ||
+                (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020))
             {
-                pRuntimeApiTrace->pFunctionName = pCallbackData->symbolName;
+
+                // Set pointer depending on API.
+                if ((callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunch_v3020) ||
+                    (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunchKernel_v7000))
+                {
+                    pRuntimeApiTrace = pRuntimeApiTrace + KERNEL;
+                }
+                else if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaDeviceSynchronize_v3020)
+                {
+                    pRuntimeApiTrace = pRuntimeApiTrace + THREAD_SYNC;
+                }
+                else if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020)
+                {
+                    pRuntimeApiTrace = pRuntimeApiTrace + MEMCPY_H2D1 + s_MemTransCount;
+                }
+
+                if (pCallbackData->callbackSite == CUPTI_API_ENTER)
+                {
+                    // For a kernel launch report the kernel name.
+                    // Otherwise use the API function name.
+                    if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunch_v3020 ||
+                        callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaLaunchKernel_v7000)
+                    {
+                        pRuntimeApiTrace->pFunctionName = pCallbackData->symbolName;
+                    }
+                    else
+                    {
+                        pRuntimeApiTrace->pFunctionName = pCallbackData->functionName;
+                    }
+
+                    // Store parameters passed to cudaMemcpy.
+                    if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020)
+                    {
+                        pRuntimeApiTrace->memcpyBytes = ((cudaMemcpy_v3020_params *)(pCallbackData->functionParams))->count;
+                        pRuntimeApiTrace->memcpyKind = ((cudaMemcpy_v3020_params *)(pCallbackData->functionParams))->kind;
+                    }
+
+                    // Collect timestamp for API start.
+                    CUPTI_API_CALL(cuptiGetTimestamp(&startTimestamp));
+
+                    pRuntimeApiTrace->startTimestamp = startTimestamp;
+                }
+
+                if (pCallbackData->callbackSite == CUPTI_API_EXIT)
+                {
+                    // Collect timestamp for API exit.
+                    CUPTI_API_CALL(cuptiGetTimestamp(&endTimestamp));
+
+                    pRuntimeApiTrace->endTimestamp = endTimestamp;
+
+                    // Advance to the next memory transfer operation.
+                    if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020)
+                    {
+                        s_MemTransCount++;
+                    }
+                }
             }
-            else
+            break;
+        
+        case CUPTI_CB_DOMAIN_STATE:
+            if(callbackId == CUPTI_CBID_STATE_FATAL_ERROR)
             {
-                pRuntimeApiTrace->pFunctionName = pCallbackData->functionName;
+                HandleDomainStateCallback(callbackId, (CUpti_StateData*)pCallbackData);
             }
-
-            // Store parameters passed to cudaMemcpy.
-            if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020)
-            {
-                pRuntimeApiTrace->memcpyBytes = ((cudaMemcpy_v3020_params *)(pCallbackData->functionParams))->count;
-                pRuntimeApiTrace->memcpyKind = ((cudaMemcpy_v3020_params *)(pCallbackData->functionParams))->kind;
-            }
-
-            // Collect timestamp for API start.
-            CUPTI_API_CALL(cuptiGetTimestamp(&startTimestamp));
-
-            pRuntimeApiTrace->startTimestamp = startTimestamp;
-        }
-
-        if (pCallbackData->callbackSite == CUPTI_API_EXIT)
-        {
-            // Collect timestamp for API exit.
-            CUPTI_API_CALL(cuptiGetTimestamp(&endTimestamp));
-
-            pRuntimeApiTrace->endTimestamp = endTimestamp;
-
-            // Advance to the next memory transfer operation.
-            if (callbackId == CUPTI_RUNTIME_TRACE_CBID_cudaMemcpy_v3020)
-            {
-                s_MemTransCount++;
-            }
-        }
-    }
+            break;
+        default:
+            break;
+    } 
 }
 
 static const char *
@@ -254,12 +269,16 @@ main(
     CUpti_SubscriberHandle subscriber;
     RuntimeApiTrace pRuntimeApiTrace[LAUNCH_LAST];
 
+    globals.pOutputFile = stdout;
     // Subscribe to CUPTI callbacks.
     CUPTI_API_CALL(cuptiSubscribe(&subscriber, (CUpti_CallbackFunc)TimestampCallback , &pRuntimeApiTrace));
 
     // Enable all callbacks for CUDA Runtime APIs.
     // Callback will be invoked at the entry and exit points of each of the CUDA Runtime API.
     CUPTI_API_CALL(cuptiEnableDomain(1, subscriber, CUPTI_CB_DOMAIN_RUNTIME_API));
+
+    // Enable the state domain callbacks for instantaneous error reporting.
+    CUPTI_API_CALL(cuptiEnableDomain(1, subscriber, CUPTI_CB_DOMAIN_STATE));
 
     DRIVER_API_CALL(cuInit(0));
 
