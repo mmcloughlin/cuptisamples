@@ -390,6 +390,7 @@ int main(
     CUPTI_API_CALL(cuptiProfilerInitialize(&profilerInitializeParams));
     CUpti_Profiler_DeviceSupported_Params params = { CUpti_Profiler_DeviceSupported_Params_STRUCT_SIZE };
     params.cuDevice = deviceNum;
+    params.api = CUPTI_PROFILER_RANGE_PROFILING;
     CUPTI_API_CALL(cuptiProfilerDeviceSupported(&params));
 
     if (params.isSupported != CUPTI_PROFILER_CONFIGURATION_SUPPORTED)

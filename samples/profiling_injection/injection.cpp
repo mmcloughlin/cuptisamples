@@ -382,6 +382,7 @@ ProfilerCallbackHandler(
             InitializeState();
             CUpti_Profiler_DeviceSupported_Params params = { CUpti_Profiler_DeviceSupported_Params_STRUCT_SIZE };
             params.cuDevice = data.deviceId;
+            params.api = CUPTI_PROFILER_RANGE_PROFILING;
             CUPTI_API_CALL(cuptiProfilerDeviceSupported(&params));
 
             // If valid for profiling, set up profiler and save to shared structure

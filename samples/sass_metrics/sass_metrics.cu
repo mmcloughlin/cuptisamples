@@ -204,9 +204,9 @@ CollectSassMetrics(uint32_t deviceNum, const CUcontext& cuCtx, const std::vector
             metricConfigs[i].metricId = sassMetricsGetPropertiesParams.metric.metricId;
             metricConfigs[i].outputGranularity = CUPTI_SASS_METRICS_OUTPUT_GRANULARITY_GPU;
             metricIdToNameMap.insert({ metricConfigs[i].metricId, metrics[i].c_str() });
-            printf("Metric Name: %s, MetricID: %llu, MetricDesc: %s\n", metrics[i].c_str(),
-                                sassMetricsGetPropertiesParams.metric.metricId,
-                                sassMetricsGetPropertiesParams.metric.pMetricDescription);
+            std::cout << "Metric Name: " << metrics[i] 
+                      << ", MetricID: " << sassMetricsGetPropertiesParams.metric.metricId
+                      << ", Metric Description: " << sassMetricsGetPropertiesParams.metric.pMetricDescription << "\n";
         }
     }
 
@@ -217,7 +217,7 @@ CollectSassMetrics(uint32_t deviceNum, const CUcontext& cuCtx, const std::vector
     setConfigParams.deviceIndex = deviceNum;
     CUPTI_API_CALL(cuptiSassMetricsSetConfig(&setConfigParams));
 
-    // 3) Enable sass 
+    // 3) Enable SASS Patching
     // if lazy  is disabled, all the functions in the modules will be patched in cuptiSassMetricsEnable() call.
     // if lazy  is enabled, the CUfunction/kernel which is called within cuptiSassMetricsEnable()/cuptiSassMetricsDisable() 
     // range will get patched at the very first execution.
@@ -225,6 +225,7 @@ CollectSassMetrics(uint32_t deviceNum, const CUcontext& cuCtx, const std::vector
     sassMetricsEnableParams.enableLazyPatching = enableLazyPatching;
     sassMetricsEnableParams.ctx = cuCtx;
     CUPTI_API_CALL(cuptiSassMetricsEnable(&sassMetricsEnableParams));
+    printf("Enable SASS Patching\n");
 
     // VectorAdd will be patched here as the lazy  has been enabled.
     DoVectorOperation(VECTOR_ADD);
@@ -265,14 +266,20 @@ CollectSassMetrics(uint32_t deviceNum, const CUcontext& cuCtx, const std::vector
     // As this is the first vectorSubstract() kernel launch, the  will be done here.
     DoVectorOperation(VECTOR_SUB);
 
-    // 6) Disable SASS .
+    // 6) Disable SASS Patching.
     // Note that with the call cuptiSassGetMetricData(), CUPTI reset all the records and here vector sub function is called after
-    // cuptiSassGetMetricData() API, so CUPTI still have SASS records for Vector Sub function and as we are calling cuptiSassDisable()
+    // cuptiSassGetMetricData() API, so CUPTI still have SASS records for Vector Sub function and as we are calling cuptiSassMetricsDisable()
     // API without calling cuptiSassGetMetricData() the data will be discarded here.
     CUpti_SassMetricsDisable_Params sassMetricsDisableParams {CUpti_SassMetricsDisable_Params_STRUCT_SIZE};
     sassMetricsDisableParams.ctx = cuCtx;
     CUPTI_API_CALL(cuptiSassMetricsDisable(&sassMetricsDisableParams));
-    printf("Disabling SASS \n");
+    if (sassMetricsDisableParams.numOfDroppedRecords > 0)
+    {
+        // As Vector Sub kernel SASS metric data has not been flushed before calling cuptiSassMetricsDisable() API, they will be
+        // marked as dropped records (number of patched instructions * number of instances for each record).
+        std::cout << "Num of Dropped Records: " << sassMetricsDisableParams.numOfDroppedRecords << "\n";
+    }
+    printf("Disable SASS Patching\n");
 
     // Vector Mul function will not get patched as it is called outside enable/disable range.
     DoVectorOperation(VECTOR_MUL);
@@ -281,6 +288,13 @@ CollectSassMetrics(uint32_t deviceNum, const CUcontext& cuCtx, const std::vector
     CUpti_SassMetricsUnsetConfig_Params unsetConfigParams{ CUpti_SassMetricsUnsetConfig_Params_STRUCT_SIZE};
     unsetConfigParams.deviceIndex = deviceNum;
     CUPTI_API_CALL(cuptiSassMetricsUnsetConfig(&unsetConfigParams));
+}
+
+void 
+Help(const char* sampleName)
+{
+    printf("For supported metrics list : %s [--deviceNum <deviceIndex>] --list\n", sampleName);
+    printf("For SASS metrics collection : %s [--deviceNum <deviceIndex>] [--metric <metric names comma separated>] [--enableLazyPatching <enableLazyPatching(0/1)>]\n", sampleName);
 }
 
 int
@@ -297,8 +311,7 @@ main(int argc, char *argv[])
         char *arg = argv[i];
         if (strcmp(arg, "--help") == 0)
         {
-            printf("For supported metrics list : %s [--deviceNum <deviceIndex>] --list\n", argv[0]);
-            printf("For SASS  : %s [--deviceNum <deviceIndex>] [--metric <metric names comma separated>] [--enableLazy <enableLazy>]\n", argv[0]);
+            Help(argv[0]);
             exit(EXIT_SUCCESS);
         }
 
@@ -316,7 +329,6 @@ main(int argc, char *argv[])
                 exit(EXIT_FAILURE);
             }
             deviceNum = atoi(argv[i + 1]);
-            printf("Device Num: %d\n", deviceNum);
             i++;
         }
         else if (strcmp(arg, "--metric") == 0)
@@ -336,23 +348,24 @@ main(int argc, char *argv[])
         }
         else if (strcmp(arg, "--enableLazyPatching") == 0)
         {
-            if (!argv[i + 1])
+            if (!argv[i + 1] || atoi(argv[i + 1]) < 0 || atoi(argv[i + 1]) > 1)
             {
-                printf("ERROR!! Add device number for querying metrics details.\n");
+                printf("ERROR!! Set 0/1 for disable/enable lazy patching mode.\n");
                 exit(EXIT_FAILURE);
             }
             bEnableLazyPatching = atoi(argv[i + 1]);
-            printf("Lazy  %s\n", (bEnableLazyPatching) ? "Enabled" : "Disabled");
             i++;
         }
         else
         {
             printf("Error!! Invalid Arguments\n");
-            printf("For supported metrics list : %s [--deviceNum <deviceIndex>] --list\n", argv[0]);
-            printf("For SASS  : %s [--deviceNum <deviceIndex>] [--metric <metric names comma separated>] [--enableLazy <enableLazyPatching>]\n", argv[0]);
+            Help(argv[0]);
             exit(EXIT_FAILURE);
         }
     }
+
+    printf("Device Num: %d\n", deviceNum);
+    printf("Lazy Patching %s\n", (bEnableLazyPatching) ? "Enabled" : "Disabled");
 
     if (metrics.empty())
     {
@@ -360,7 +373,7 @@ main(int argc, char *argv[])
     }
 
     cudaDeviceProp prop;
-    RUNTIME_API_CALL(cudaGetDevice(&deviceNum));
+    RUNTIME_API_CALL(cudaSetDevice(deviceNum));
     RUNTIME_API_CALL(cudaGetDeviceProperties(&prop, deviceNum));
     printf("Device Name: %s\n", prop.name);
     printf("Device compute capability: %d.%d\n", prop.major, prop.minor);
@@ -368,6 +381,52 @@ main(int argc, char *argv[])
     // Initialize profiler API and test device compatibility
     CUpti_Profiler_Initialize_Params profilerInitializeParams = { CUpti_Profiler_Initialize_Params_STRUCT_SIZE };
     CUPTI_API_CALL(cuptiProfilerInitialize(&profilerInitializeParams));
+
+    CUpti_Profiler_DeviceSupported_Params params = { CUpti_Profiler_DeviceSupported_Params_STRUCT_SIZE };
+    params.cuDevice = deviceNum;
+    params.api = CUPTI_PROFILER_SASS_METRICS;
+    CUPTI_API_CALL(cuptiProfilerDeviceSupported(&params));
+
+    if (params.isSupported != CUPTI_PROFILER_CONFIGURATION_SUPPORTED)
+    {
+        ::std::cerr << "Unable to profile on device " << deviceNum << ::std::endl;
+
+        if (params.architecture == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice architecture is not supported" << ::std::endl;
+        }
+
+        if (params.sli == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice sli configuration is not supported" << ::std::endl;
+        }
+
+        if (params.vGpu == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice vgpu configuration is not supported" << ::std::endl;
+        }
+        else if (params.vGpu == CUPTI_PROFILER_CONFIGURATION_DISABLED)
+        {
+            ::std::cerr << "\tdevice vgpu configuration disabled profiling support" << ::std::endl;
+        }
+
+        if (params.confidentialCompute == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice confidential compute configuration is not supported" << ::std::endl;
+        }
+
+        if (params.cmp == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tNVIDIA Crypto Mining Processors (CMP) are not supported" << ::std::endl;
+        }
+
+        if (params.wsl == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tWSL is not supported" << ::std::endl;
+        }
+        exit(EXIT_WAIVED);
+    }
+
 
     CUcontext cuCtx;
     DRIVER_API_CALL(cuCtxCreate(&cuCtx, 0, deviceNum));
@@ -400,18 +459,19 @@ void ListSupportedMetrics(int deviceIndex)
     CUPTI_API_CALL(cuptiSassMetricsGetMetrics(&getMetricsParams));
     for (size_t i = 0; i < supportedMetrics.size(); ++i)
     {
-        printf("Metric Name: %s, MetricID: %llu, MetricDesc: %s\n", supportedMetrics[i].pMetricName,
-            supportedMetrics[i].metricId, supportedMetrics[i].pMetricDescription);
+        std::cout << "Metric Name: " << supportedMetrics[i].pMetricName
+                  << ", MetricID: " << supportedMetrics[i].metricId
+                  << ", Metric Description: " << supportedMetrics[i].pMetricDescription << "\n";
     }
 }
 
 void printSassData(CUpti_SassMetricsFlushData_Params* pParams)
 {
     using InstanceToMetricVal        = std::unordered_map<uint32_t, uint64_t>;                    // Key -> InstanceID
-    using PcOffsetToInstanceTable    = std::map<uint32_t, InstanceToMetricVal>;                  // Key -> pcOffset
+    using PcOffsetToInstanceTable    = std::map<uint32_t, InstanceToMetricVal>;                   // Key -> pcOffset
     using MetricToPcOffsetTable      = std::unordered_map<uint64_t, PcOffsetToInstanceTable>;     // Key -> metricId
-    using FunctionToMetricTable      = std::unordered_map<std::string, MetricToPcOffsetTable>;   // Key -> function Name
-    using ModuleToFunctionTable      = std::unordered_map<uint32_t, FunctionToMetricTable>;      // key -> module cubinCrc
+    using FunctionToMetricTable      = std::unordered_map<std::string, MetricToPcOffsetTable>;    // Key -> function Name
+    using ModuleToFunctionTable      = std::unordered_map<uint32_t, FunctionToMetricTable>;       // key -> module cubinCrc
 
 
     CUpti_SassMetrics_Data* pSassMetricData = pParams->pMetricsData;
@@ -442,13 +502,13 @@ void printSassData(CUpti_SassMetricsFlushData_Params* pParams)
 
     for (const auto& module : moduleToFunctionTable)
     {
-        printf("\nModule cubinCrc: %lu\n", module.first);
+        printf("\nModule cubinCrc: %u\n", module.first);
         for (const auto& function : module.second)
         {
-            printf("\nKernel Name: %s\n", function.first.c_str());
+            printf("Kernel Name: %s\n", function.first.c_str());
             for (const auto& metric : function.second)
             {
-                printf("\nmetric Name: %s\n", metricIdToNameMap[metric.first].c_str());
+                printf("metric Name: %s\n", metricIdToNameMap[metric.first].c_str());
                 for (const auto& pcOffset : metric.second)
                 {
                     std::cout << "\t\t" << "[Inst] pcOffset: " << std::hex << "0x" << pcOffset.first;
@@ -461,6 +521,7 @@ void printSassData(CUpti_SassMetricsFlushData_Params* pParams)
                     }
                     std::cout << "\n";
                 }
+                std::cout << "\n";
             }
         }
     }
