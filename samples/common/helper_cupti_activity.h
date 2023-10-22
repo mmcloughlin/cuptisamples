@@ -936,27 +936,27 @@ GetCorrelationId(
     switch (pRecord->kind)
     {
         case CUPTI_ACTIVITY_KIND_MEMCPY:
-            return ((CUpti_ActivityMemcpy5*)pRecord)->correlationId;
+            return ((CUpti_ActivityMemcpy5 *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_MEMSET:
-            return ((CUpti_ActivityMemset4*)pRecord)->correlationId;
+            return ((CUpti_ActivityMemset4 *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_KERNEL:
         case CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL:
-            return ((CUpti_ActivityKernel8*)pRecord)->correlationId;
+            return ((CUpti_ActivityKernel9 *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_DRIVER:
         case CUPTI_ACTIVITY_KIND_RUNTIME:
-            return ((CUpti_ActivityAPI*)pRecord)->correlationId;
+            return ((CUpti_ActivityAPI *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_EVENT:
-            return ((CUpti_ActivityEvent*)pRecord)->correlationId;
+            return ((CUpti_ActivityEvent *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_METRIC:
-            return ((CUpti_ActivityMetric*)pRecord)->correlationId;
+            return ((CUpti_ActivityMetric *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_CDP_KERNEL:
-            return ((CUpti_ActivityCdpKernel*)pRecord)->correlationId;
+            return ((CUpti_ActivityCdpKernel *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_EVENT_INSTANCE:
-            return ((CUpti_ActivityEventInstance*)pRecord)->correlationId;
+            return ((CUpti_ActivityEventInstance *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_MEMCPY2:
-            return ((CUpti_ActivityMemcpyPtoP4*)pRecord)->correlationId;
+            return ((CUpti_ActivityMemcpyPtoP4 *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_METRIC_INSTANCE:
-            return ((CUpti_ActivityMetricInstance*)pRecord)->correlationId;
+            return ((CUpti_ActivityMetricInstance *)pRecord)->correlationId;
         default:
             return 0;
     }
@@ -1059,7 +1059,7 @@ PrintActivity(
         case CUPTI_ACTIVITY_KIND_KERNEL:
         case CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL:
         {
-            CUpti_ActivityKernel8 *pKernelRecord = (CUpti_ActivityKernel8 *)pRecord;
+            CUpti_ActivityKernel9 *pKernelRecord = (CUpti_ActivityKernel9 *)pRecord;
 
             fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, \"%s\", correlationId %u\n"
                     "\tgrid [ %u, %u, %u ], block [ %u, %u, %u ], cluster [ %u, %u, %u ], sharedMemory (static %u, dynamic %u)\n"
@@ -1393,16 +1393,17 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_OVERHEAD:
         {
-            CUpti_ActivityOverhead *pOverheadRecord = (CUpti_ActivityOverhead *)pRecord;
+            CUpti_ActivityOverhead2 *pOverheadRecord = (CUpti_ActivityOverhead2 *)pRecord;
 
-            fprintf(pFileHandle, "%s %s [ %llu, %llu ] duration %llu, %s, id %u\n",
+            fprintf(pFileHandle, "%s %s [ %llu, %llu ] duration %llu, %s, id %u, correlation id %lu\n",
                     GetActivityKindString(pOverheadRecord->kind),
                     GetActivityOverheadKindString(pOverheadRecord->overheadKind),
                     (unsigned long long)pOverheadRecord->start,
                     (unsigned long long)pOverheadRecord->end,
                     (unsigned long long)(pOverheadRecord->end - pOverheadRecord->start),
                     GetActivityObjectKindString(pOverheadRecord->objectKind),
-                    GetActivityObjectKindId(pOverheadRecord->objectKind, &pOverheadRecord->objectId));
+                    GetActivityObjectKindId(pOverheadRecord->objectKind, &pOverheadRecord->objectId),
+                    (unsigned long)pOverheadRecord->correlationId);
 
             break;
         }
@@ -2217,7 +2218,7 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_GRAPH_TRACE:
         {
-            CUpti_ActivityGraphTrace *pGraphTraceRecord = (CUpti_ActivityGraphTrace *)pRecord;
+            CUpti_ActivityGraphTrace2 *pGraphTraceRecord = (CUpti_ActivityGraphTrace2 *)pRecord;
 
             fprintf(pFileHandle, "%s [ start %llu, end %llu ] duration %llu, correlationId %u\n deviceId %u, contextId %u, streamId %u, graphId %u\n",
                     GetActivityKindString(pGraphTraceRecord->kind),

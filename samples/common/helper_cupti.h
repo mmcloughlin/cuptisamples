@@ -40,8 +40,8 @@ do                                                                              
         const char *pErrorString;                                                   \
         cuGetErrorString(_status, &pErrorString);                                   \
                                                                                     \
-        fprintf(stderr, "%s:%d: Error: Function %s failed with error: %s.\n",       \
-                __FILE__, __LINE__, #apiFunctionCall, pErrorString);                \
+        fprintf(stderr, "%s:%d: Error: Function %s failed with error (%d): %s.\n",  \
+                __FILE__, __LINE__, #apiFunctionCall, _status, pErrorString);       \
                                                                                     \
         exit(EXIT_FAILURE);                                                         \
     }                                                                               \
@@ -53,8 +53,9 @@ do                                                                              
     cudaError_t _status = apiFunctionCall;                                          \
     if (_status != cudaSuccess)                                                     \
     {                                                                               \
-        fprintf(stderr, "%s:%d: Error: Function %s failed with error: %s.\n",       \
-                __FILE__, __LINE__, #apiFunctionCall, cudaGetErrorString(_status)); \
+        fprintf(stderr, "%s:%d: Error: Function %s failed with error (%d): %s.\n",  \
+                __FILE__, __LINE__, #apiFunctionCall, _status,                      \
+                cudaGetErrorString(_status));                                       \
                                                                                     \
         exit(EXIT_FAILURE);                                                         \
     }                                                                               \
@@ -69,8 +70,8 @@ do                                                                              
         const char *pErrorString;                                                   \
         cuptiGetResultString(_status, &pErrorString);                               \
                                                                                     \
-        fprintf(stderr, "%s:%d: Error: Function %s failed with error: %s.\n",       \
-                __FILE__, __LINE__, #apiFunctionCall, pErrorString);                \
+        fprintf(stderr, "%s:%d: Error: Function %s failed with error (%d): %s.\n",  \
+                __FILE__, __LINE__, #apiFunctionCall, _status, pErrorString);       \
                                                                                     \
         exit(EXIT_FAILURE);                                                         \
     }                                                                               \

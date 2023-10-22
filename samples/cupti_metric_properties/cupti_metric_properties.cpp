@@ -203,6 +203,82 @@ GetMetricDetails(
     return true;
 }
 
+bool
+GetMetricsNumOfPasses(
+    std::vector<std::string> metricNames,
+    std::string chipName,
+    const uint8_t *pCounterAvailabilityImage)
+{
+    NVPW_CUDA_RawMetricsConfig_Create_V2_Params rawMetricsConfigCreateParams = { NVPW_CUDA_RawMetricsConfig_Create_V2_Params_STRUCT_SIZE };
+    rawMetricsConfigCreateParams.activityKind = NVPA_ACTIVITY_KIND_PROFILER;
+    rawMetricsConfigCreateParams.pChipName = chipName.c_str();
+    rawMetricsConfigCreateParams.pCounterAvailabilityImage = pCounterAvailabilityImage;
+    RETURN_IF_NVPW_ERROR(false, NVPW_CUDA_RawMetricsConfig_Create_V2(&rawMetricsConfigCreateParams));
+
+    NVPA_RawMetricsConfig *pRawMetricsConfig = rawMetricsConfigCreateParams.pRawMetricsConfig;
+    NVPW_RawMetricsConfig_BeginPassGroup_Params beginPassGroupParams = { NVPW_RawMetricsConfig_BeginPassGroup_Params_STRUCT_SIZE };
+    beginPassGroupParams.pRawMetricsConfig = pRawMetricsConfig;
+    RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_BeginPassGroup(&beginPassGroupParams));
+
+    for (auto metricName : metricNames)
+    {
+        std::vector<NVPA_RawMetricRequest> rawMetricRequests;
+        if (!GetRawMetricRequests(chipName, metricName, rawMetricRequests, pCounterAvailabilityImage))
+        {
+            printf("Error: Failed to get raw metrics for metric: %s\n", metricName.c_str());
+
+            return false;
+        }
+
+	printf("metric: %s, Number of raw metric requests: %lu\n", metricName.c_str(), (unsigned long)rawMetricRequests.size());
+
+        NVPW_RawMetricsConfig_IsAddMetricsPossible_Params isAddMetricsPossibleParams = { NVPW_RawMetricsConfig_IsAddMetricsPossible_Params_STRUCT_SIZE };
+        isAddMetricsPossibleParams.pRawMetricsConfig = pRawMetricsConfig;
+        isAddMetricsPossibleParams.pRawMetricRequests = rawMetricRequests.data();
+        isAddMetricsPossibleParams.numMetricRequests = rawMetricRequests.size();
+        RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_IsAddMetricsPossible(&isAddMetricsPossibleParams));
+
+        NVPW_RawMetricsConfig_AddMetrics_Params addMetricsParams = { NVPW_RawMetricsConfig_AddMetrics_Params_STRUCT_SIZE };
+        addMetricsParams.pRawMetricsConfig = pRawMetricsConfig;
+        addMetricsParams.pRawMetricRequests = rawMetricRequests.data();
+        addMetricsParams.numMetricRequests = rawMetricRequests.size();
+        RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_AddMetrics(&addMetricsParams));
+
+    }
+
+
+    NVPW_RawMetricsConfig_EndPassGroup_Params endPassGroupParams = { NVPW_RawMetricsConfig_EndPassGroup_Params_STRUCT_SIZE };
+    endPassGroupParams.pRawMetricsConfig = pRawMetricsConfig;
+    RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_EndPassGroup(&endPassGroupParams));
+
+    NVPW_RawMetricsConfig_GetNumPasses_Params rawMetricsConfigGetNumPassesParams = { NVPW_RawMetricsConfig_GetNumPasses_Params_STRUCT_SIZE };
+    rawMetricsConfigGetNumPassesParams.pRawMetricsConfig = pRawMetricsConfig;
+    RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_GetNumPasses(&rawMetricsConfigGetNumPassesParams));
+
+    // No Nesting of ranges in case of CUPTI_AutoRange, in AutoRange
+    // the range is already at finest granularity of every kernel Launch so numNestingLevels = 1
+    size_t numNestingLevels = 1;
+    size_t numIsolatedPasses = rawMetricsConfigGetNumPassesParams.numIsolatedPasses;
+    size_t numPipelinedPasses = rawMetricsConfigGetNumPassesParams.numPipelinedPasses;
+    size_t numOfPasses = numPipelinedPasses + numIsolatedPasses * numNestingLevels;
+
+    printf("Number of nesting levels:                             %zu\n", numNestingLevels);
+    printf("Number of isolated passes for the specified metrics:  %zu\n", numIsolatedPasses);
+    printf("Number of pipelined passes for the specified metrics: %zu\n", numPipelinedPasses);
+    printf("Total number of passes for the specified metrics:     %zu\n", numOfPasses);
+
+    NVPW_RawMetricsConfig_Destroy_Params rawMetricsConfigDestroyParams = { NVPW_RawMetricsConfig_Destroy_Params_STRUCT_SIZE };
+    rawMetricsConfigDestroyParams.pRawMetricsConfig = pRawMetricsConfig;
+    RETURN_IF_NVPW_ERROR(false, NVPW_RawMetricsConfig_Destroy((NVPW_RawMetricsConfig_Destroy_Params*)&rawMetricsConfigDestroyParams));
+
+    return true;
+}
+
+enum num_passes_opt {
+	NUM_PASSES_PER_METRIC = 1,
+	NUM_PASSES_TOTAL
+};
+
 int
 main(
     int argc,
@@ -216,13 +292,14 @@ main(
     bool bIsCSVformat = false;
     char* metricName;
     std::string exportFileName;
+    int num_passes_opt = NUM_PASSES_PER_METRIC;
 
     for (int i = 1; i < argc; ++i)
     {
         char *arg = argv[i];
         if (strcmp(arg, "--help") == 0)
         {
-            printf("Usage: %s --device [device_num] --chip [chip name] --metrics [metric_names comma separated] --csv --file [filename]\n", argv[0]);
+            printf("Usage: %s --device [device_num] --chip [chip name] --metrics [metric_names comma separated] --passes [per-metric|total] --csv --file [filename]\n", argv[0]);
             exit(EXIT_SUCCESS);
         }
 
@@ -258,6 +335,24 @@ main(
             {
                 metricNames.push_back(metricName);
                 metricName = strtok(NULL, ",");
+            }
+            i++;
+        }
+        else if (strcmp(arg, "--passes") == 0)
+        {
+            if (!argv[i + 1])
+            {
+                printf("ERROR!! Add option for --num_passes [per-metric|total].\n");
+                exit(EXIT_FAILURE);
+            }
+	    if (strcmp(argv[i+1], "per-metric") == 0)
+                num_passes_opt = NUM_PASSES_PER_METRIC;
+	    else if (strcmp(argv[i+1], "total") == 0)
+                num_passes_opt = NUM_PASSES_TOTAL;
+	    else
+	    {
+                printf("ERROR!! Incorrect option '%s' for --num_passes should be per-metric|total\n", argv[i+1]);
+                exit(EXIT_FAILURE);
             }
             i++;
         }
@@ -395,28 +490,41 @@ main(
     }
     else
     {
-        for (auto metricName : metricNames)
-        {
-            if (!GetMetricDetails(metricName, chipName, outputStream, counterAvailabilityImage.data()))
+	if (num_passes_opt == NUM_PASSES_PER_METRIC)
+	{
+            for (auto metricName : metricNames)
             {
-                printf("Error!! Failed to get the metric details\n");
+                if (!GetMetricDetails(metricName, chipName, outputStream, counterAvailabilityImage.data()))
+                {
+                    printf("Error!! Failed to get the metric details\n");
+                    exit(EXIT_WAIVED);
+                }
+            }
+	} else if (num_passes_opt == NUM_PASSES_TOTAL)
+        {
+            if (!GetMetricsNumOfPasses(metricNames, chipName, counterAvailabilityImage.data()))
+            {
+                printf("Error!! Failed to get total number of passes\n");
                 exit(EXIT_WAIVED);
             }
-        }
+	}
     }
 
-    if (exportFileName.empty())
+    if (num_passes_opt == NUM_PASSES_PER_METRIC)
     {
-       PRINT_METRIC_DETAILS(std::cout, outputStream, bIsCSVformat);
-    }
-    else
-    {
-        std::ofstream outputFile(exportFileName);
-        if (outputFile.is_open())
+        if (exportFileName.empty())
         {
-            PRINT_METRIC_DETAILS(outputFile, outputStream, bIsCSVformat);
-            outputFile.close();
-            printf("Metric details has been written to %s file.\n", exportFileName.c_str());
+            PRINT_METRIC_DETAILS(std::cout, outputStream, bIsCSVformat);
+        }
+        else
+        {
+            std::ofstream outputFile(exportFileName);
+            if (outputFile.is_open())
+            {
+                PRINT_METRIC_DETAILS(outputFile, outputStream, bIsCSVformat);
+                outputFile.close();
+                printf("Metric details has been written to %s file.\n", exportFileName.c_str());
+            }
         }
     }
 
