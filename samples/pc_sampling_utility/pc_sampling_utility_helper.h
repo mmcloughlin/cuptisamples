@@ -210,6 +210,7 @@ PrintRetrievedPcSampData()
             std::cout << ", cubinCrc: " << buffersRetrievedDataVector[pcSampBufferIndex].pPcData[i].cubinCrc
                       << ", functionName: " << buffersRetrievedDataVector[pcSampBufferIndex].pPcData[i].functionName
                       << ", functionIndex: " << buffersRetrievedDataVector[pcSampBufferIndex].pPcData[i].functionIndex
+                      << ", correlationId: " << buffersRetrievedDataVector[pcSampBufferIndex].pPcData[i].correlationId
                       << ", pcOffset: " << buffersRetrievedDataVector[pcSampBufferIndex].pPcData[i].pcOffset
                       << ", stallReasonCount: " << buffersRetrievedDataVector[pcSampBufferIndex].pPcData[i].stallReasonCount;
 
@@ -495,6 +496,7 @@ SourceCorrelation(
                 {
                     std::cout << "functionName: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].functionName
                               << ", functionIndex: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].functionIndex
+                              << ", correlationId: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].correlationId
                               << ", pcOffset: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].pcOffset
                               << ", lineNumber:0"
                               << ", fileName: " << "ERROR_NO_CUBIN"
@@ -516,6 +518,7 @@ SourceCorrelation(
             {
                 std::cout << "functionName: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].functionName
                           << ", functionIndex: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].functionIndex
+                          << ", correlationId: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].correlationId
                           << ", pcOffset: " << pPcSampDataBuffer[pcSampBufferIndex].pPcData[i].pcOffset;
             }
 

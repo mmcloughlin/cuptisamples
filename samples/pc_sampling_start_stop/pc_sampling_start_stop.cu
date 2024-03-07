@@ -251,7 +251,8 @@ PrintPCSamplingData(
     {
         std::cout << ", pcOffset : 0x"<< std::hex << pPcSamplingData->pPcData[i].pcOffset
                   << ", stallReasonCount: " << std::dec << pPcSamplingData->pPcData[i].stallReasonCount
-                  << ", functionName: " << pPcSamplingData->pPcData[i].functionName;
+                  << ", functionName: " << pPcSamplingData->pPcData[i].functionName
+                  << ", correlationID: " << pPcSamplingData->pPcData[i].correlationId;
         for (size_t j = 0; j < pPcSamplingData->pPcData[i].stallReasonCount; j++)
         {
             std::cout << ", stallReason: " << GetStallReason(stallReasonCount, pPcSamplingData->pPcData[i].stallReason[j].pcSamplingStallReasonIndex, pStallReasonIndex, ppStallReasons)

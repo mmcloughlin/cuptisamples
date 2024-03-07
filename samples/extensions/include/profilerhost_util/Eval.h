@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
+
 namespace NV {
     namespace Metric {
         namespace Eval {

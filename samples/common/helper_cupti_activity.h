@@ -17,9 +17,9 @@
 #pragma once
 
 // System headers
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
 // CUPTI headers
@@ -46,6 +46,8 @@ typedef struct GlobalState_st
     size_t activityBufferSize;                                       // CUPTI activity buffer size.
     FILE   *pOutputFile;                                             // File handle to print the CUPTI activity records. default = stdout.
     void   *pUserData;                                               // User data used to initialize CUPTI trace. Refer UserData structure.
+    uint64_t buffersRequested;                                       // Requested buffers by CUPTI.
+    uint64_t buffersCompleted;                                       // Completed buffers by received from CUPTI.
 } GlobalState;
 
 // User data provided by the application using InitCuptiTrace()
@@ -64,10 +66,10 @@ typedef struct UserData_st
 } UserData;
 
 // Global variables
-GlobalState globals = { 0 };
+static GlobalState globals = { 0 };
 
 // Helper Functions
-const char *
+static const char *
 GetActivityKindString(
     CUpti_ActivityKind activityKind)
 {
@@ -182,13 +184,13 @@ GetActivityKindString(
     }
 }
 
-CUpti_ActivityKind
+static CUpti_ActivityKind
 GetActivityKindFromString(
     const char *pActivityKindString)
 {
     if (!pActivityKindString)
     {
-        printf("\nError: NULL string.");
+        std::cerr << "\n\nError: NULL string.\n\n";
         exit(-1);
     }
 
@@ -401,7 +403,7 @@ GetActivityKindFromString(
         return CUPTI_ACTIVITY_KIND_JIT;
     }
     else {
-        printf("Error: Invalid string %s cannot be converted to CUPTI Activity Kind.", pActivityKindString);
+        std::cerr << "\n\nError: Invalid string " << pActivityKindString << " cannot be converted to CUPTI Activity Kind.\n\n";
         exit(-1);
     }
 }
@@ -471,6 +473,12 @@ GetActivityOverheadKindString(
             return "CUPTI_INSTRUMENTATION";
         case CUPTI_ACTIVITY_OVERHEAD_CUPTI_RESOURCE:
             return "CUPTI_RESOURCE";
+        case CUPTI_ACTIVITY_OVERHEAD_RUNTIME_TRIGGERED_MODULE_LOADING:
+            return "RUNTIME_TRIGGERED_MODULE_LOADING";
+        case CUPTI_ACTIVITY_OVERHEAD_LAZY_FUNCTION_LOADING:
+            return "LAZY_FUNCTION_LOADING";
+        case CUPTI_ACTIVITY_OVERHEAD_COMMAND_BUFFER_FULL:
+            return "COMMAND_BUFFER_FULL";
         default:
             return "<unknown>";
     }
@@ -999,7 +1007,7 @@ PrintOpenaccCommon(
 
 }
 
-void
+static void
 PrintActivity(
     CUpti_Activity *pRecord,
     FILE *pFileHandle)
@@ -1061,7 +1069,7 @@ PrintActivity(
         {
             CUpti_ActivityKernel9 *pKernelRecord = (CUpti_ActivityKernel9 *)pRecord;
 
-            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, \"%s\", correlationId %u\n"
+            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, \"%s\", correlationId %u, cacheConfigRequested %d, cacheConfigExecuted %d\n"
                     "\tgrid [ %u, %u, %u ], block [ %u, %u, %u ], cluster [ %u, %u, %u ], sharedMemory (static %u, dynamic %u)\n"
                     "\tdeviceId %u, contextId %u, streamId %u, graphId %u, graphNodeId %llu, channelId %u, channelType %s\n",
                     GetActivityKindString(pKernelRecord->kind),
@@ -1070,6 +1078,8 @@ PrintActivity(
                     (unsigned long long)(pKernelRecord->end - pKernelRecord->start),
                     GetName(pKernelRecord->name),
                     pKernelRecord->correlationId,
+                    pKernelRecord->cacheConfig.config.requested,
+                    pKernelRecord->cacheConfig.config.executed,
                     pKernelRecord->gridX,
                     pKernelRecord->gridY,
                     pKernelRecord->gridZ,
@@ -1393,7 +1403,7 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_OVERHEAD:
         {
-            CUpti_ActivityOverhead2 *pOverheadRecord = (CUpti_ActivityOverhead2 *)pRecord;
+            CUpti_ActivityOverhead3 *pOverheadRecord = (CUpti_ActivityOverhead3 *)pRecord;
 
             fprintf(pFileHandle, "%s %s [ %llu, %llu ] duration %llu, %s, id %u, correlation id %lu\n",
                     GetActivityKindString(pOverheadRecord->kind),
@@ -1404,6 +1414,26 @@ PrintActivity(
                     GetActivityObjectKindString(pOverheadRecord->objectKind),
                     GetActivityObjectKindId(pOverheadRecord->objectKind, &pOverheadRecord->objectId),
                     (unsigned long)pOverheadRecord->correlationId);
+            if (pOverheadRecord->overheadData)
+            {
+                switch (pOverheadRecord->overheadKind)
+                {
+                    case CUPTI_ACTIVITY_OVERHEAD_COMMAND_BUFFER_FULL:
+                    {
+                        CUpti_ActivityOverheadCommandBufferFullData* pCommandBufferData = (CUpti_ActivityOverheadCommandBufferFullData*)pOverheadRecord->overheadData;
+                        fprintf(pFileHandle, "CUpti_ActivityOverheadCommandBufferFullData : commandBufferLength %d channelID %d channelType %d\n",
+                        pCommandBufferData->commandBufferLength,
+                        pCommandBufferData->channelID,
+                        pCommandBufferData->channelType);
+                        break;
+                    }
+                    default:
+                    {
+                        break;
+                    }
+                }
+
+            }
 
             break;
         }
@@ -2220,7 +2250,7 @@ PrintActivity(
         {
             CUpti_ActivityGraphTrace2 *pGraphTraceRecord = (CUpti_ActivityGraphTrace2 *)pRecord;
 
-            fprintf(pFileHandle, "%s [ start %llu, end %llu ] duration %llu, correlationId %u\n deviceId %u, contextId %u, streamId %u, graphId %u\n",
+            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, correlationId %u\n deviceId %u, contextId %u, streamId %u, graphId %u\n",
                     GetActivityKindString(pGraphTraceRecord->kind),
                     (unsigned long long)pGraphTraceRecord->start,
                     (unsigned long long)pGraphTraceRecord->end,
@@ -2235,9 +2265,9 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_JIT:
         {
-            CUpti_ActivityJit *pJitRecord = (CUpti_ActivityJit *)pRecord;
+            CUpti_ActivityJit2 *pJitRecord = (CUpti_ActivityJit2 *)pRecord;
 
-            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, deviceId %u, correlationId %u\n"
+            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, deviceId %u, correlationId %u, processId %u, threadId %u\n"
                     "jitEntryType %s, jitOperationType %s, jitOperationCorrelationId %llu\n cacheSize %llu, cachePath %s\n",
                     GetActivityKindString(pJitRecord->kind),
                     (unsigned long long)pJitRecord->start,
@@ -2245,6 +2275,8 @@ PrintActivity(
                     (unsigned long long)(pJitRecord->end - pJitRecord->start),
                     pJitRecord->deviceId,
                     pJitRecord->correlationId,
+                    pJitRecord->processId,
+                    pJitRecord->threadId,
                     GetJitEntryType(pJitRecord->jitEntryType),
                     GetJitOperationType(pJitRecord->jitOperationType),
                     (unsigned long long)pJitRecord->jitOperationCorrelationId,
@@ -2259,7 +2291,7 @@ PrintActivity(
     }
 }
 
-void
+static void
 PrintActivityBuffer(
     uint8_t *pBuffer,
     size_t validBytes,
@@ -2269,7 +2301,8 @@ PrintActivityBuffer(
     CUpti_Activity *pRecord = NULL;
     CUptiResult status = CUPTI_SUCCESS;
 
-    do {
+    do
+    {
         status = cuptiActivityGetNextRecord(pBuffer, validBytes, &pRecord);
         if (status == CUPTI_SUCCESS)
         {
@@ -2309,6 +2342,8 @@ BufferRequested(
     *pSize = globals.activityBufferSize;
     *ppBuffer = ALIGN_BUFFER(pBuffer, ALIGN_SIZE);
     *pMaxNumRecords = 0;
+
+    globals.buffersRequested++;
 }
 
 static void CUPTIAPI
@@ -2330,6 +2365,7 @@ BufferCompleted(
         PrintActivityBuffer(pBuffer, validSize, pOutputFile, globals.pUserData);
     }
 
+    globals.buffersCompleted++;
     free(pBuffer);
 }
 
@@ -2344,19 +2380,19 @@ HandleSyncronizationCallbacks(
     if (callbackId == CUPTI_CBID_SYNCHRONIZE_CONTEXT_SYNCHRONIZED &&
         ((UserData *)pUserData)->flushAtCtxSync)
     {
-        CUPTI_API_CALL(cuptiActivityFlushAll(0));
+        CUPTI_API_CALL_VERBOSE(cuptiActivityFlushAll(0));
     }
     // Flush the CUPTI activity records buffer on stream synchronization
     else if (callbackId == CUPTI_CBID_SYNCHRONIZE_STREAM_SYNCHRONIZED &&
             ((UserData *)pUserData)->flushAtStreamSync)
     {
         uint32_t streamId = 0;
-        CUPTI_API_CALL(cuptiGetStreamId(pSynchronizeData->context, pSynchronizeData->stream, &streamId));
-        CUPTI_API_CALL(cuptiActivityFlushAll(0));
+        CUPTI_API_CALL_VERBOSE(cuptiGetStreamId(pSynchronizeData->context, pSynchronizeData->stream, &streamId));
+        CUPTI_API_CALL_VERBOSE(cuptiActivityFlushAll(0));
     }
 }
 
-void
+static void
 HandleDomainStateCallback(
     CUpti_CallbackId callbackId,
     const CUpti_StateData *pStateData)
@@ -2409,7 +2445,7 @@ CuptiCallbackHandler(
                 case CUPTI_RUNTIME_TRACE_CBID_cudaDeviceReset_v3020:
                     if (pCallabckInfo->callbackSite == CUPTI_API_ENTER)
                     {
-                        CUPTI_API_CALL(cuptiActivityFlushAll(0));
+                        CUPTI_API_CALL_VERBOSE(cuptiActivityFlushAll(0));
                     }
                     break;
                 default:
@@ -2425,7 +2461,7 @@ CuptiCallbackHandler(
 }
 
 // CUPTI Trace Setup
-void
+static void
 InitCuptiTrace(
     void *pUserData,
     void *pTraceCallback,
@@ -2433,7 +2469,7 @@ InitCuptiTrace(
 {
     if (!pUserData)
     {
-        fprintf(stderr, "Invalid parameter userData\n");
+        std::cerr << "Invalid parameter pUserData.\n";
         exit(EXIT_FAILURE);
     }
 
@@ -2447,35 +2483,37 @@ InitCuptiTrace(
         // Else subscribe CUPTI to the common CuptiCallbackHandler.
         if (pTraceCallback)
         {
-            CUPTI_API_CALL(cuptiSubscribe(&globals.subscriberHandle, (CUpti_CallbackFunc)pTraceCallback, pUserData));
+            CUPTI_API_CALL_VERBOSE(cuptiSubscribe(&globals.subscriberHandle, (CUpti_CallbackFunc)pTraceCallback, pUserData));
         }
         else
         {
-            CUPTI_API_CALL(cuptiSubscribe(&globals.subscriberHandle, (CUpti_CallbackFunc)CuptiCallbackHandler, pUserData));
+            CUPTI_API_CALL_VERBOSE(cuptiSubscribe(&globals.subscriberHandle, (CUpti_CallbackFunc)CuptiCallbackHandler, pUserData));
         }
 
 
         // Enable CUPTI callback on context syncronization
         if (((UserData *)pUserData)->flushAtCtxSync)
         {
-            CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_SYNCHRONIZE, CUPTI_CBID_SYNCHRONIZE_CONTEXT_SYNCHRONIZED));
+            CUPTI_API_CALL_VERBOSE(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_SYNCHRONIZE, CUPTI_CBID_SYNCHRONIZE_CONTEXT_SYNCHRONIZED));
         }
 
         // Enable CUPTI callback on stream syncronization
         if (((UserData *)pUserData)->flushAtStreamSync)
         {
-            CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_SYNCHRONIZE, CUPTI_CBID_SYNCHRONIZE_STREAM_SYNCHRONIZED));
+            CUPTI_API_CALL_VERBOSE(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_SYNCHRONIZE, CUPTI_CBID_SYNCHRONIZE_STREAM_SYNCHRONIZED));
         }
 
         // Enable CUPTI callback on CUDA device reset by default
-        CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RUNTIME_API, CUPTI_RUNTIME_TRACE_CBID_cudaDeviceReset_v3020));
+        CUPTI_API_CALL_VERBOSE(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RUNTIME_API, CUPTI_RUNTIME_TRACE_CBID_cudaDeviceReset_v3020));
 
         // Enable CUPTI callback on fatal errors by default
-        CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_STATE, CUPTI_CBID_STATE_FATAL_ERROR));
+        CUPTI_API_CALL_VERBOSE(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_STATE, CUPTI_CBID_STATE_FATAL_ERROR));
     }
 
     // Register callbacks for buffer requests and for buffers completed by CUPTI.
-    CUPTI_API_CALL(cuptiActivityRegisterCallbacks(BufferRequested, BufferCompleted));
+    globals.buffersRequested = 0;
+    globals.buffersCompleted = 0;
+    CUPTI_API_CALL_VERBOSE(cuptiActivityRegisterCallbacks(BufferRequested, BufferCompleted));
 
     // Optionally get and set activity attributes.
     // Attributes can be set by the CUPTI client to change behavior of the activity API.
@@ -2485,8 +2523,8 @@ InitCuptiTrace(
     {
         size_t attrValue = (((UserData *)pUserData))->deviceBufferSize;
         size_t attrValueSize = sizeof(size_t);
-        CUPTI_API_CALL(cuptiActivitySetAttribute(CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE, &attrValueSize, &attrValue));
-        printf("CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE = %llu Bytes\n", (long long unsigned)attrValue);
+        CUPTI_API_CALL_VERBOSE(cuptiActivitySetAttribute(CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE, &attrValueSize, &attrValue));
+        std::cout << "CUPTI_ACTIVITY_ATTR_DEVICE_BUFFER_SIZE = " << attrValue << " bytes.\n";
     }
 
     if ((((UserData *)pUserData))->activityBufferSize != 0)
@@ -2497,19 +2535,21 @@ InitCuptiTrace(
     {
         globals.activityBufferSize = BUF_SIZE;
     }
+
+    std::cout << "Activity buffer size = " << globals.activityBufferSize << " bytes.\n";
 }
 
-void
+static void
 DeInitCuptiTrace(void)
 {
     CUPTI_API_CALL(cuptiGetLastError());
 
     if (globals.subscriberHandle)
     {
-        CUPTI_API_CALL(cuptiUnsubscribe(globals.subscriberHandle));
+        CUPTI_API_CALL_VERBOSE(cuptiUnsubscribe(globals.subscriberHandle));
     }
 
-    CUPTI_API_CALL(cuptiActivityFlushAll(1));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityFlushAll(1));
 
     if (globals.pUserData != NULL)
     {
