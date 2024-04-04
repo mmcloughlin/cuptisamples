@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 NVIDIA Corporation.  All rights reserved.
+ * Copyright 2022-2024 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -2319,6 +2319,10 @@ PrintActivityBuffer(
             }
         }
         else if (status == CUPTI_ERROR_MAX_LIMIT_REACHED)
+        {
+            break;
+        }
+        else if (status == CUPTI_ERROR_INVALID_KIND)
         {
             break;
         }
