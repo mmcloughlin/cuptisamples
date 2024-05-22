@@ -294,12 +294,12 @@ SetupCupti()
     InitCuptiTrace(pUserData, NULL, stdout);
 
     // Enable CUDA runtime activity kinds for CUPTI to provide correlation ids.
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_RUNTIME));
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_DRIVER));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_RUNTIME));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_DRIVER));
 
     // Enable activity kinds to trace GPU activities kernel and memcpy.
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL));
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMCPY));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMCPY));
 }
 
 int

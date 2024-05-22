@@ -95,7 +95,7 @@ DoVectorAddition() {
     memset(pHostC, 0, size);
 
     // Push external id for the initialization: memory allocation and memcpy operations from host to device.
-    CUPTI_API_CALL(cuptiActivityPushExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, static_cast<uint64_t>(INITIALIZATION_EXTERNAL_ID)));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityPushExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, static_cast<uint64_t>(INITIALIZATION_EXTERNAL_ID)));
 
     DRIVER_API_CALL(cuCtxCreate(&context, 0, device));
 
@@ -109,10 +109,10 @@ DoVectorAddition() {
     RUNTIME_API_CALL(cudaMemcpy(pDeviceB, pHostB, size, cudaMemcpyHostToDevice));
 
     // Pop the external id.
-    CUPTI_API_CALL(cuptiActivityPopExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, &id));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityPopExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, &id));
 
     // Push external id for the vector addition and copy of results from device to host.
-    CUPTI_API_CALL(cuptiActivityPushExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, static_cast<uint64_t>(EXECUTION_EXTERNAL_ID)));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityPushExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, static_cast<uint64_t>(EXECUTION_EXTERNAL_ID)));
 
     // Invoke kernel.
     threadsPerBlock = 256;
@@ -127,10 +127,10 @@ DoVectorAddition() {
     RUNTIME_API_CALL(cudaMemcpy(pHostC, pDeviceC, size, cudaMemcpyDeviceToHost));
 
     // Pop the external id.
-    CUPTI_API_CALL(cuptiActivityPopExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, &id));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityPopExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, &id));
 
     // Push external id for the cleanup phase in the code.
-    CUPTI_API_CALL(cuptiActivityPushExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, static_cast<uint64_t>(CLEANUP_EXTERNAL_ID)));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityPushExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, static_cast<uint64_t>(CLEANUP_EXTERNAL_ID)));
 
     // Free device memory.
     if (pDeviceA)
@@ -147,7 +147,7 @@ DoVectorAddition() {
     }
 
     // Pop the external id.
-    CUPTI_API_CALL(cuptiActivityPopExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, &id));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityPopExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_UNKNOWN, &id));
 
     // Free host memory.
     if (pHostA)
@@ -245,14 +245,14 @@ SetupCupti()
     InitCuptiTrace(pUserData, NULL, stdout);
 
     // Enable CUDA runtime activity kinds for CUPTI to provide correlation ids.
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_RUNTIME));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_RUNTIME));
 
     // Enable external correlation activtiy kind..
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION));
 
     // Enable activity kinds to trace GPU activities kernel and memcpy.
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL));
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMCPY));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMCPY));
 }
 
 int

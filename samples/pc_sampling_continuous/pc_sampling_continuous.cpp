@@ -81,6 +81,11 @@
 #include <cupti_pcsampling.h>
 #include "helper_cupti.h"
 #include <cupti.h>
+
+#ifdef _WIN32
+#define strdup _strdup
+#endif
+
 using namespace CUPTI::PcSamplingUtil;
 
 // Macros
@@ -154,8 +159,8 @@ ReadInputParams()
         return;
     }
 
-    char *pToken = strtok(pInjectionParam, " ");
-
+    char *pInjectionParamCopy = strdup(pInjectionParam);
+    char *pToken = strtok(pInjectionParamCopy, " ");
     while (pToken != NULL)
     {
         if (!strcmp(pToken, "--collection-mode"))
@@ -211,6 +216,7 @@ ReadInputParams()
     }
     g_circularBuffer.resize(g_circularbufCount);
     g_bufferEmptyTrackerArray.resize(g_circularbufCount, false);
+    free(pInjectionParamCopy);
 }
 
 static bool
@@ -768,6 +774,8 @@ void CallbackHandler(
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchGridAsync:
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel:
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel_ptsz:
+                case CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch:
+                case CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch_ptsz:
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel:
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel_ptsz:
                 case CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice:
@@ -997,6 +1005,8 @@ extern "C" int InitializeInjection(void)
         CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchGridAsync));
         CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel));
         CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchKernel_ptsz));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch));
+        CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuGraphLaunch_ptsz));
         CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel));
         CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernel_ptsz));
         CUPTI_API_CALL(cuptiEnableCallback(1, subscriber, CUPTI_CB_DOMAIN_DRIVER_API, CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice));

@@ -113,7 +113,7 @@ SetupCupti()
     InitCuptiTrace(pUserData, NULL, stdout);
 
     // Enable unified memory counter activity.
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_UNIFIED_MEMORY_COUNTER));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_UNIFIED_MEMORY_COUNTER));
 }
 
 int
@@ -157,7 +157,7 @@ main(
     RUNTIME_API_CALL(cudaFree(pData));
 
     // Disable unified memory counter activity.
-    CUPTI_API_CALL(cuptiActivityDisable(CUPTI_ACTIVITY_KIND_UNIFIED_MEMORY_COUNTER));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityDisable(CUPTI_ACTIVITY_KIND_UNIFIED_MEMORY_COUNTER));
 
     RUNTIME_API_CALL(cudaDeviceReset());
 

@@ -1248,14 +1248,15 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_CONTEXT:
         {
-            CUpti_ActivityContext *pContextRecord = (CUpti_ActivityContext *)pRecord;
+            CUpti_ActivityContext3 *pContextRecord = (CUpti_ActivityContext3 *)pRecord;
 
-            fprintf(pFileHandle, "%s computeApiKind %s, contextId %u, deviceId %u, nullStreamId %d\n",
+            fprintf(pFileHandle, "%s computeApiKind %s, contextId %u, deviceId %u, nullStreamId %d, CIG mode %d\n",
                     GetActivityKindString(pContextRecord->kind),
                     GetComputeApiKindString((CUpti_ActivityComputeApiKind) pContextRecord->computeApiKind),
                     pContextRecord->contextId,
                     pContextRecord->deviceId,
-                    (int)pContextRecord->nullStreamId);
+                    (int)pContextRecord->nullStreamId,
+                    pContextRecord->cigMode);
 
             break;
         }

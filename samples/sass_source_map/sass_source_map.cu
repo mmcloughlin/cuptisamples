@@ -135,8 +135,8 @@ SetupCupti()
     // Common CUPTI Initialization.
     InitCuptiTrace(pUserData, (void *)TraceCallback, stdout);
 
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_INSTRUCTION_EXECUTION));
-    CUPTI_API_CALL(cuptiEnableDomain(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RESOURCE));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_INSTRUCTION_EXECUTION));
+    CUPTI_API_CALL_VERBOSE(cuptiEnableDomain(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RESOURCE));
 }
 
 int

@@ -156,8 +156,8 @@ SetupCupti()
     InitCuptiTrace(pUserData, NULL, stdout);
 
     // Enable CUPTI activities related to memory allocation
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMORY2));
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMORY_POOL));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMORY2));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMORY_POOL));
 
 }
 

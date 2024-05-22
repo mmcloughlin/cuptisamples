@@ -295,15 +295,15 @@ SetupCupti()
     InitCuptiTrace(pUserData, (void *)GraphsCallbackHandler, stdout);
 
     // Enable activity record kinds.
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_RUNTIME));
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMCPY));
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMSET));
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_RUNTIME));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMCPY));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MEMSET));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL));
 
     // Enable callbacks for CUDA graph.
-    CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_GRAPHNODE_CREATED));
-    CUPTI_API_CALL(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_GRAPHNODE_CLONED));
-    CUPTI_API_CALL(cuptiEnableDomain(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RUNTIME_API));
+    CUPTI_API_CALL_VERBOSE(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_GRAPHNODE_CREATED));
+    CUPTI_API_CALL_VERBOSE(cuptiEnableCallback(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RESOURCE, CUPTI_CBID_RESOURCE_GRAPHNODE_CLONED));
+    CUPTI_API_CALL_VERBOSE(cuptiEnableDomain(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_RUNTIME_API));
 }
 
 int

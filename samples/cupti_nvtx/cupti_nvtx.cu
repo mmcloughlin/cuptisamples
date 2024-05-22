@@ -278,12 +278,12 @@ SetupCupti()
     // Common CUPTI Initialization.
     InitCuptiTrace(pUserData, (void *)NvtxCallback, stdout);
 
-    CUPTI_API_CALL(cuptiEnableDomain(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_NVTX));
+    CUPTI_API_CALL_VERBOSE(cuptiEnableDomain(1, globals.subscriberHandle, CUPTI_CB_DOMAIN_NVTX));
 
     // For NVTX markers. (Marker, Domain, Start/End ranges, Push/Pop ranges, Registered Strings)
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MARKER));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_MARKER));
     // For naming CUDA resources. (Threads, Devices, Contexts, Streams)
-    CUPTI_API_CALL(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_NAME));
+    CUPTI_API_CALL_VERBOSE(cuptiActivityEnable(CUPTI_ACTIVITY_KIND_NAME));
 }
 
 int

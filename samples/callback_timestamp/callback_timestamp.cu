@@ -149,7 +149,7 @@ TimestampCallback(
                 }
             }
             break;
-        
+
         case CUPTI_CB_DOMAIN_STATE:
             if(callbackId == CUPTI_CBID_STATE_FATAL_ERROR)
             {
@@ -158,7 +158,7 @@ TimestampCallback(
             break;
         default:
             break;
-    } 
+    }
 }
 
 static const char *
@@ -271,14 +271,14 @@ main(
 
     globals.pOutputFile = stdout;
     // Subscribe to CUPTI callbacks.
-    CUPTI_API_CALL(cuptiSubscribe(&subscriber, (CUpti_CallbackFunc)TimestampCallback , &pRuntimeApiTrace));
+    CUPTI_API_CALL_VERBOSE(cuptiSubscribe(&subscriber, (CUpti_CallbackFunc)TimestampCallback , &pRuntimeApiTrace));
 
     // Enable all callbacks for CUDA Runtime APIs.
     // Callback will be invoked at the entry and exit points of each of the CUDA Runtime API.
-    CUPTI_API_CALL(cuptiEnableDomain(1, subscriber, CUPTI_CB_DOMAIN_RUNTIME_API));
+    CUPTI_API_CALL_VERBOSE(cuptiEnableDomain(1, subscriber, CUPTI_CB_DOMAIN_RUNTIME_API));
 
     // Enable the state domain callbacks for instantaneous error reporting.
-    CUPTI_API_CALL(cuptiEnableDomain(1, subscriber, CUPTI_CB_DOMAIN_STATE));
+    CUPTI_API_CALL_VERBOSE(cuptiEnableDomain(1, subscriber, CUPTI_CB_DOMAIN_STATE));
 
     DRIVER_API_CALL(cuInit(0));
 
@@ -337,7 +337,7 @@ main(
     CleanUp(pHostA, pHostB, pHostC, pDeviceA, pDeviceB, pDeviceC);
     RUNTIME_API_CALL(cudaDeviceSynchronize());
 
-    CUPTI_API_CALL(cuptiUnsubscribe(subscriber));
+    CUPTI_API_CALL_VERBOSE(cuptiUnsubscribe(subscriber));
 
     exit(EXIT_SUCCESS);
 
