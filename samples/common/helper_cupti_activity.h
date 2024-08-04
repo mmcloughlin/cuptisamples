@@ -479,6 +479,8 @@ GetActivityOverheadKindString(
             return "LAZY_FUNCTION_LOADING";
         case CUPTI_ACTIVITY_OVERHEAD_COMMAND_BUFFER_FULL:
             return "COMMAND_BUFFER_FULL";
+        case CUPTI_ACTIVITY_OVERHEAD_ACTIVITY_BUFFER_REQUEST:
+            return "ACTIVITY_BUFFER_REQUEST";
         default:
             return "<unknown>";
     }
@@ -2189,11 +2191,13 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_MEMORY2:
         {
-            CUpti_ActivityMemory3 *pMemory2Record = (CUpti_ActivityMemory3 *)(void *)pRecord;
+            CUpti_ActivityMemory4 *pMemory2Record = (CUpti_ActivityMemory4 *)(void *)pRecord;
 
             fprintf(pFileHandle, "%s [ %llu ] memoryOperationType %s, memoryKind %s, size %llu, address %llu, pc %llu,\n"
                     "  deviceId %u, contextId %u, streamId %u, processId %u, correlationId %u, isAsync %u,\n"
-                    "  memoryPool %s, memoryPoolAddress %llu,  memoryPoolThreshold %llu",
+                    "  memoryPool %s, memoryPoolAddress %llu,  memoryPoolThreshold %llu\n"
+                    "source %s\n"
+                    ,
                     GetActivityKindString(pMemory2Record->kind),
                     (unsigned long long)pMemory2Record->timestamp,
                     GetMemoryOperationTypeString(pMemory2Record->memoryOperationType),
@@ -2209,7 +2213,9 @@ PrintActivity(
                     pMemory2Record->isAsync,
                     GetMemoryPoolTypeString(pMemory2Record->memoryPoolConfig.memoryPoolType),
                     (unsigned long long)pMemory2Record->memoryPoolConfig.address,
-                    (unsigned long long)pMemory2Record->memoryPoolConfig.releaseThreshold);
+                    (unsigned long long)pMemory2Record->memoryPoolConfig.releaseThreshold
+                    ,pMemory2Record->source
+                    );
 
             if (pMemory2Record->memoryPoolConfig.memoryPoolType == CUPTI_ACTIVITY_MEMORY_POOL_TYPE_LOCAL)
             {

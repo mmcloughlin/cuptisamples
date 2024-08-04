@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 NVIDIA Corporation. All rights reserved.
+ * Copyright 2021-2024 NVIDIA Corporation. All rights reserved.
  *
  * CUPTI based tracing injection to trace any CUDA application.
  * This sample demonstrates how to use activity
@@ -194,6 +194,12 @@ SelectActivities()
     SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_CONCURRENT_KERNEL);
     SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_MEMSET);
     SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_MEMCPY);
+    SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_MEMCPY2);
+    SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_MEMORY2);
+    // Enable activities to capture the NVTX annotations - markers, ranges and resource naming.
+    SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_NAME);
+    SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_MARKER);
+    SELECT_ACTIVITY(injectionGlobals.profileMode, CUPTI_ACTIVITY_KIND_MARKER_DATA);
 
     return CUPTI_SUCCESS;
 }

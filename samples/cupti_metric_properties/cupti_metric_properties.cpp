@@ -79,20 +79,22 @@ struct ApplicationParams
 {
     std::vector<MetricDetails> metrics;
     const char* chipName = NULL;
+    std::vector<uint8_t> counterAvailabilityImage;
     bool bListSubMetrics = false;
 };
 
 class MetricEvaluator
 {
 public:
-    explicit MetricEvaluator(const char* pChipName)
+    explicit MetricEvaluator(const char* pChipName, uint8_t* pCounterAvailabilityImage)
     {
         NVPW_CUDA_MetricsEvaluator_CalculateScratchBufferSize_Params calculateScratchBufferSizeParam = {NVPW_CUDA_MetricsEvaluator_CalculateScratchBufferSize_Params_STRUCT_SIZE};
         calculateScratchBufferSizeParam.pChipName = pChipName;
-        calculateScratchBufferSizeParam.pCounterAvailabilityImage = nullptr;
+        calculateScratchBufferSizeParam.pCounterAvailabilityImage = pCounterAvailabilityImage;
         NVPA_Status nvpwResult = NVPW_CUDA_MetricsEvaluator_CalculateScratchBufferSize(&calculateScratchBufferSizeParam);
         if (nvpwResult != NVPA_STATUS_SUCCESS) {
-            std::cerr << "Failed calculate Scratch buffer size\n";
+            std::cerr << "Failed to calculate Scratch buffer size with error "
+                      << NV::Metric::Utils::GetNVPWResultString(nvpwResult) << "\n";
             exit(EXIT_FAILURE);
         }
 
@@ -101,10 +103,11 @@ public:
         metricEvaluatorInitializeParams.scratchBufferSize = m_scratchBuffer.size();
         metricEvaluatorInitializeParams.pScratchBuffer = m_scratchBuffer.data();
         metricEvaluatorInitializeParams.pChipName = pChipName;
-        metricEvaluatorInitializeParams.pCounterAvailabilityImage = nullptr;
+        metricEvaluatorInitializeParams.pCounterAvailabilityImage = pCounterAvailabilityImage;
         nvpwResult = NVPW_CUDA_MetricsEvaluator_Initialize(&metricEvaluatorInitializeParams);
         if (nvpwResult != NVPA_STATUS_SUCCESS) {
-            std::cerr << "Failed to initialize metric evaluator\n";
+            std::cerr << "Failed to initialize metric evaluator "
+                      << NV::Metric::Utils::GetNVPWResultString(nvpwResult) << "\n";
             exit(EXIT_FAILURE);
         }
         m_pNVPWMetricEvaluator = metricEvaluatorInitializeParams.pMetricsEvaluator;
@@ -296,12 +299,12 @@ private:
 class MetricConfig
 {
 public:
-    explicit MetricConfig(const char* pChipName)
+    explicit MetricConfig(const char* pChipName, uint8_t* pCounterAvailabilityImage)
     {
         NVPW_CUDA_RawMetricsConfig_Create_V2_Params rawMetricsConfigCreateParams = { NVPW_CUDA_RawMetricsConfig_Create_V2_Params_STRUCT_SIZE };
         rawMetricsConfigCreateParams.activityKind = NVPA_ACTIVITY_KIND_PROFILER;
         rawMetricsConfigCreateParams.pChipName = pChipName;
-        rawMetricsConfigCreateParams.pCounterAvailabilityImage = NULL;
+        rawMetricsConfigCreateParams.pCounterAvailabilityImage = pCounterAvailabilityImage;
         NVPA_Status nvpwResult = NVPW_CUDA_RawMetricsConfig_Create_V2(&rawMetricsConfigCreateParams);
         if (nvpwResult != NVPA_STATUS_SUCCESS) {
             std::cerr << "Failed to create raw metric config\n";
@@ -447,6 +450,25 @@ const char* GetChipNameForDevice(uint32_t deviceNum)
     return getChipNameParams.pChipName;
 }
 
+CUptiResult GetCounterAvailabilityImage(std::vector<uint8_t>& counterAvailabilityImage)
+{
+    DRIVER_API_CALL(cuInit(0));
+    CUcontext ctx;
+    DRIVER_API_CALL(cuCtxCreate(&ctx, 0, 0));
+
+    CUpti_Profiler_GetCounterAvailability_Params getCounterAvailabilityParams = { CUpti_Profiler_GetCounterAvailability_Params_STRUCT_SIZE };
+    getCounterAvailabilityParams.ctx = ctx;
+    CUPTI_API_CALL(cuptiProfilerGetCounterAvailability(&getCounterAvailabilityParams));
+
+    counterAvailabilityImage.resize(getCounterAvailabilityParams.counterAvailabilityImageSize);
+    getCounterAvailabilityParams.counterAvailabilityImageSize = counterAvailabilityImage.size();
+    getCounterAvailabilityParams.pCounterAvailabilityImage = counterAvailabilityImage.data();
+    CUPTI_API_CALL(cuptiProfilerGetCounterAvailability(&getCounterAvailabilityParams));
+
+    DRIVER_API_CALL(cuCtxDestroy(ctx));
+    return CUPTI_SUCCESS;
+}
+
 void ParseArgs(int argc, char *argv[], ApplicationParams& appParams)
 {
     int deviceNum = 0;
@@ -509,6 +531,7 @@ void ParseArgs(int argc, char *argv[], ApplicationParams& appParams)
 
     if (!appParams.chipName) {
         appParams.chipName = GetChipNameForDevice(deviceNum);
+        CUPTI_API_CALL(GetCounterAvailabilityImage(appParams.counterAvailabilityImage));
     }
     printf("Chip Name: %s\n", appParams.chipName);
 
@@ -526,7 +549,7 @@ int main(int argc, char *argv[])
     NVPW_InitializeHost_Params initializeHostParams = { NVPW_InitializeHost_Params_STRUCT_SIZE };
     RETURN_IF_NVPW_ERROR(false, NVPW_InitializeHost(&initializeHostParams));
 
-    std::unique_ptr<MetricEvaluator> metricEvaluatorPtr = std::make_unique<MetricEvaluator>(appParams.chipName);
+    std::unique_ptr<MetricEvaluator> metricEvaluatorPtr = std::make_unique<MetricEvaluator>(appParams.chipName, appParams.counterAvailabilityImage.data());
     const bool bListAllMetrics = (appParams.metrics.empty() ? true : false);
     if (bListAllMetrics)
     {
@@ -549,7 +572,7 @@ int main(int argc, char *argv[])
                 metricEvaluatorPtr->GetSubmetrics(metric.name, metricType, metric.submetrics);
             }
 
-            std::unique_ptr<MetricConfig> metricConfigPtr = std::make_unique<MetricConfig>(appParams.chipName);
+            std::unique_ptr<MetricConfig> metricConfigPtr = std::make_unique<MetricConfig>(appParams.chipName, appParams.counterAvailabilityImage.data());
             if (!metricConfigPtr->GetNumOfPasses({metric.name}, metricEvaluatorPtr.get(), metric.numOfPasses)) {
                 printf("Failed to get Number of passes for metric.\n");
                 exit(EXIT_FAILURE);
@@ -562,7 +585,7 @@ int main(int argc, char *argv[])
         }
 
         size_t numOfPassesInTotal;
-        std::unique_ptr<MetricConfig> metricConfigPtr = std::make_unique<MetricConfig>(appParams.chipName);
+        std::unique_ptr<MetricConfig> metricConfigPtr = std::make_unique<MetricConfig>(appParams.chipName, appParams.counterAvailabilityImage.data());
         if (!metricConfigPtr->GetNumOfPasses(metricNames, metricEvaluatorPtr.get(), numOfPassesInTotal)) {
             printf("Failed to get Number of passes for metric.\n");
             exit(EXIT_FAILURE);

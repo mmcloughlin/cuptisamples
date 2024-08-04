@@ -14,12 +14,15 @@
 2. Run the CUDA application after setting the environment variable CUDA_INJECTION64_PATH to the path of the injection library.
    When CUDA_INJECTION64_PATH is set to a shared library, at initialization, CUDA will load the shared object and call the function named 'InitializeInjection'.
    CUDA application needs not to be modified.
-
+   To generate NVTX activity records, set the environment variable NVTX_INJECTION64_PATH to the path of the CUPTI library.
+ 
     2.1  On Linux,
             $ export CUDA_INJECTION64_PATH=<full_path>/libcupti_trace_injection.so
+            $ export NVTX_INJECTION64_PATH=<full_path>/libcupti.so
             $ <run CUDA application>
     2.2  On Windows,
             > set CUDA_INJECTION64_PATH=<full_path>/libcupti_trace_injection.dll
+            > set NVTX_INJECTION64_PATH=<full_path>/cupti.dll
             > <run CUDA application>
 
 
