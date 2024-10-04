@@ -14,7 +14,7 @@
  *
  * The user is responsible for continuously calling the decode API, which frees up the hardware buffer for storing new data.
  *
- * In this sample, In the main thread the CUDA workload is launched. This workload is a simple vector addition implemented 
+ * In this sample, In the main thread the CUDA workload is launched. This workload is a simple vector addition implemented
  * in the `VectorAdd` kernel.
  *
  * The decode thread where we call the `DecodeCounterData` API. This API decodes the raw PM sampling data stored
@@ -154,13 +154,16 @@ struct ParsedArgs
 };
 
 ParsedArgs parseArgs(int argc, char *argv[]);
+void PmSamplingDeviceSupportStatus(CUdevice device);
 int PmSamplingCollection(std::vector<uint8_t>& counterAvailibilityImage, ParsedArgs& args);
 int PmSamplingQueryMetrics(std::string chipName, std::vector<uint8_t>& counterAvailibilityImage, ParsedArgs& args);
-void DecodeCounterData( std::vector<uint8_t>& counterDataImage,
-                        std::vector<const char*> metricsList,
-                        CuptiPmSampling& cuptiPmSamplingTarget,
-                        CuptiProfilerHost& pmSamplingHost,
-                        CUptiResult& result);
+void DecodeCounterData(
+    std::vector<uint8_t>& counterDataImage,
+    std::vector<const char*> metricsList,
+    CuptiPmSampling& cuptiPmSamplingTarget,
+    CuptiProfilerHost& pmSamplingHost,
+    CUptiResult& result
+);
 
 int main(int argc, char *argv[])
 {
@@ -171,6 +174,10 @@ int main(int argc, char *argv[])
     std::vector<uint8_t> counterAvailibilityImage;
     if (args.deviceIndex >= 0)
     {
+        CUdevice cuDevice;
+        DRIVER_API_CALL(cuDeviceGet(&cuDevice, args.deviceIndex));
+        PmSamplingDeviceSupportStatus(cuDevice);
+
         CuptiPmSampling::GetChipName(args.deviceIndex, chipName);
         CuptiPmSampling::GetCounterAvailabilityImage(args.deviceIndex, counterAvailibilityImage);
     }
@@ -416,4 +423,53 @@ ParsedArgs parseArgs(int argc, char *argv[])
         }
     }
     return args;
+}
+
+void PmSamplingDeviceSupportStatus(CUdevice device)
+{
+    CUpti_Profiler_DeviceSupported_Params params = { CUpti_Profiler_DeviceSupported_Params_STRUCT_SIZE };
+    params.cuDevice = device;
+    params.api = CUPTI_PROFILER_PM_SAMPLING;
+    CUPTI_API_CALL(cuptiProfilerDeviceSupported(&params));
+
+    if (params.isSupported != CUPTI_PROFILER_CONFIGURATION_SUPPORTED)
+    {
+        ::std::cerr << "Unable to profile on device " << device << ::std::endl;
+
+        if (params.architecture == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice architecture is not supported" << ::std::endl;
+        }
+
+        if (params.sli == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice sli configuration is not supported" << ::std::endl;
+        }
+
+        if (params.vGpu == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice vgpu configuration is not supported" << ::std::endl;
+        }
+        else if (params.vGpu == CUPTI_PROFILER_CONFIGURATION_DISABLED)
+        {
+            ::std::cerr << "\tdevice vgpu configuration disabled profiling support" << ::std::endl;
+        }
+
+        if (params.confidentialCompute == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tdevice confidential compute configuration is not supported" << ::std::endl;
+        }
+
+        if (params.cmp == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tNVIDIA Crypto Mining Processors (CMP) are not supported" << ::std::endl;
+        }
+
+        if (params.wsl == CUPTI_PROFILER_CONFIGURATION_UNSUPPORTED)
+        {
+            ::std::cerr << "\tWSL is not supported" << ::std::endl;
+        }
+
+        exit(EXIT_WAIVED);
+    }
 }
