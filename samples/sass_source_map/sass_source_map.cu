@@ -153,10 +153,21 @@ main(
 
     cudaDeviceProp deviceProperties;
 
+    printf("Warning: Source/SASS-level metrics from the cupti_activity.h header are deprecated on Volta+ GPU architectures\n"
+           "and will be removed in a future release. Additionally, these metrics are not supported on Blackwell+ GPU architectures.\n"
+           "It is recommended to transition to the SASS Metric API from the cupti_sass_metrics.h header, which is supported\n"
+           "on Volta+ GPU architectures\n\n");
+
     SetupCupti();
 
     RUNTIME_API_CALL(cudaGetDeviceProperties(&deviceProperties, 0));
     printf("Device Name: %s\n", deviceProperties.name);
+
+    if (deviceProperties.major > 9)
+    {
+        printf("Warning: Sample is waived on this device since it not supported on Blackwell+ GPU architectures.\n");
+        exit(EXIT_WAIVED);
+    }
 
     float *pDeviceA, *pDeviceB;
 

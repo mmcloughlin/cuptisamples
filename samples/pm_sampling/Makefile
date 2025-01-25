@@ -45,7 +45,11 @@ ifneq ($(TARGET_ARCH), $(HOST_ARCH))
                 $(error ERROR - QNX_TARGET must be passed to the QNX target toolchain)
             endif
             HOST_COMPILER ?= $(QNX_HOST)/usr/bin/q++
-            NVCCFLAGS += --qpp-config 8.3.0,gcc_ntoaarch64le -lsocket
+            ifndef QPP_CONFIG_VERSION
+                QPP_CONFIG_VERSION = 12.2.0
+            endif
+            $(info QPP_CONFIG_VERSION = $(QPP_CONFIG_VERSION))
+            NVCCFLAGS += --qpp-config $(QPP_CONFIG_VERSION),gcc_ntoaarch64le -lsocket
         endif
     endif
 
@@ -55,7 +59,7 @@ ifneq ($(TARGET_ARCH), $(HOST_ARCH))
 endif
 
 # Gencode arguments
-SMS ?= 75 80 86 87 89 90
+SMS ?= 75 80 86 87 89 90 100 101 120
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 

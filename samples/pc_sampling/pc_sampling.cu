@@ -145,6 +145,12 @@ main(
     int deviceNum = 0;
     cudaDeviceProp prop;
 
+    printf("Warning: The PC Sampling Activity API from the cupti_activity.h header is deprecated on Volta+ GPU architectures\n"
+           "and will be removed in a future release. Additionally, this API is not supported on Blackwell+ GPU architectures.\n"
+           "It is recommended to transition to the PC Sampling API from the cupti_pcsampling.h header, which is supported\n"
+           "on Volta+ GPU architectures.\n\n");
+
+
     SetupCupti();
 
     RUNTIME_API_CALL(cudaGetDevice(&deviceNum));
@@ -152,9 +158,9 @@ main(
     printf("Device Name: %s\n", prop.name);
     printf("Device compute capability: %d.%d\n", prop.major, prop.minor);
 
-    if (!((prop.major > 5) || ((prop.major == 5) && (prop.minor == 2))))
+    if (!((prop.major > 5) || ((prop.major == 5) && (prop.minor == 2)) || prop.minor <= 9))
     {
-        printf("Warning: Sample is waived on this device.\nPC sampling is supported on devices with compute capability 5.2 or 6.0 and higher.\n");
+        printf("Warning: Sample is waived on this device.\nPC Sampling Activity API is supported on devices with compute capability 5.2 and from 6.0 to 9.0.\n");
         exit(EXIT_WAIVED);
     }
 

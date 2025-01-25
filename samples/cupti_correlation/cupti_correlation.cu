@@ -147,7 +147,7 @@ PrintCorrealtionInformation()
         switch (s_Iter->second->kind) {
             case CUPTI_ACTIVITY_KIND_MEMCPY:
             {
-                CUpti_ActivityMemcpy5 *pMemcpyRecord = (CUpti_ActivityMemcpy5 *)s_Iter->second;
+                CUpti_ActivityMemcpy6 *pMemcpyRecord = (CUpti_ActivityMemcpy6 *)s_Iter->second;
                 // Check whether memcpy correlation id is present in connection map.
                 if (s_ConnectionMap.find(pMemcpyRecord->correlationId) != s_ConnectionMap.end())
                 {
@@ -218,8 +218,8 @@ CorrelationActivityRecords(
     {
         case CUPTI_ACTIVITY_KIND_MEMCPY:
         {
-            CUpti_ActivityMemcpy5 *pMemcpyRecord = (CUpti_ActivityMemcpy5 *)pRecord;
-            uint32_t recordSize = sizeof(CUpti_ActivityMemcpy5);
+            CUpti_ActivityMemcpy6 *pMemcpyRecord = (CUpti_ActivityMemcpy6 *)pRecord;
+            uint32_t recordSize = sizeof(CUpti_ActivityMemcpy6);
 
             // Creating copy of the record to print correaltion data after the application is over.
             CUpti_Activity *pRecordCopy = (CUpti_Activity *)malloc(recordSize);

@@ -306,7 +306,10 @@ int PmSamplingCollection(std::vector<uint8_t>& counterAvailibilityImage, ParsedA
     // 6. Print the sample ranges for the collected metrics
     pmSamplingHost.PrintSampleRanges();
 
-    // 7. Clean up
+    // 7. Disable PM sampling for release all the resources allocated in CUPTI
+    CUPTI_API_CALL(cuptiPmSamplingTarget.DisablePmSampling());
+
+    // 8. Clean up
     cuptiPmSamplingTarget.TearDown();
     pmSamplingHost.TearDown();
     vectorWorkLoad.TearDown();

@@ -1,7 +1,7 @@
 /*
  * Copyright 2023 NVIDIA Corporation. All rights reserved
  *
- * Sample CUPTI app to demonstrate the usage of new sass metrics APIs (beta)
+ * Sample CUPTI app to demonstrate the usage of new sass metrics APIs.
  * This app will work on devices with compute capability 7.0 and higher.
  */
 

@@ -384,7 +384,6 @@ main(
     char *argv[])
 {
     CUdevice dev;
-    CUptiResult cuptiResult = CUPTI_SUCCESS;
     int ret = 0;
     int deviceId = 0;
     int deviceCount = 0;
@@ -462,7 +461,6 @@ main(
             if (maxDomains == 0)
             {
                 printf("Warning: No domain is exposed by dev = %d\n", dev);
-                cuptiResult = CUPTI_ERROR_UNKNOWN;
                 ret = -2;
                 goto Exit;
             }

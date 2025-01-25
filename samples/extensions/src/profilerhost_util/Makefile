@@ -71,7 +71,11 @@ ifneq ($(TARGET_ARCH), $(HOST_ARCH))
             endif
             HOST_COMPILER ?= $(QNX_HOST)/usr/bin/q++
             NVCC_FLAGS += -D_QNX_SOURCE
-            NVCC_FLAGS += --qpp-config 8.3.0,gcc_ntoaarch64le -lsocket
+            ifndef QPP_CONFIG_VERSION
+                QPP_CONFIG_VERSION = 12.2.0
+            endif
+            $(info QPP_CONFIG_VERSION = $(QPP_CONFIG_VERSION))
+            NVCC_FLAGS += --qpp-config $(QPP_CONFIG_VERSION),gcc_ntoaarch64le -lsocket
         endif
     endif
 

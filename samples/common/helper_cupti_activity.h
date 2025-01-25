@@ -179,6 +179,8 @@ GetActivityKindString(
             return "GRAPH_TRACE";
         case CUPTI_ACTIVITY_KIND_JIT:
             return "JIT";
+        case CUPTI_ACTIVITY_KIND_MEM_DECOMPRESS:
+            return "MEM_DECOMPRESS";
         default:
             return "<unknown>";
     }
@@ -402,6 +404,10 @@ GetActivityKindFromString(
     {
         return CUPTI_ACTIVITY_KIND_JIT;
     }
+else if (!stricmp(pActivityKindString, "MEM_DECOMPRESS"))
+    {
+        return CUPTI_ACTIVITY_KIND_MEM_DECOMPRESS;
+    }
     else {
         std::cerr << "\n\nError: Invalid string " << pActivityKindString << " cannot be converted to CUPTI Activity Kind.\n\n";
         exit(-1);
@@ -481,6 +487,8 @@ GetActivityOverheadKindString(
             return "COMMAND_BUFFER_FULL";
         case CUPTI_ACTIVITY_OVERHEAD_ACTIVITY_BUFFER_REQUEST:
             return "ACTIVITY_BUFFER_REQUEST";
+        case CUPTI_ACTIVITY_OVERHEAD_UVM_ACTIVITY_INIT:
+            return "UVM_ACTIVITY_INIT";
         default:
             return "<unknown>";
     }
@@ -788,7 +796,9 @@ GetChannelType(
         case CUPTI_CHANNEL_TYPE_COMPUTE:
             return "COMPUTE";
         case CUPTI_CHANNEL_TYPE_ASYNC_MEMCPY:
-            return "ASYNC_MEMCPY";
+           return "ASYNC_MEMCPY";
+        case CUPTI_CHANNEL_TYPE_DECOMP:
+            return "DECOMP";
         default:
             return "<unknown>";
     }
@@ -946,7 +956,7 @@ GetCorrelationId(
     switch (pRecord->kind)
     {
         case CUPTI_ACTIVITY_KIND_MEMCPY:
-            return ((CUpti_ActivityMemcpy5 *)pRecord)->correlationId;
+            return ((CUpti_ActivityMemcpy6 *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_MEMSET:
             return ((CUpti_ActivityMemset4 *)pRecord)->correlationId;
         case CUPTI_ACTIVITY_KIND_KERNEL:
@@ -1020,9 +1030,9 @@ PrintActivity(
     {
         case CUPTI_ACTIVITY_KIND_MEMCPY:
         {
-            CUpti_ActivityMemcpy5 *pMemcpyRecord = (CUpti_ActivityMemcpy5 *)pRecord;
+            CUpti_ActivityMemcpy6 *pMemcpyRecord = (CUpti_ActivityMemcpy6 *)pRecord;
 
-            fprintf(pFileHandle, "%s \"%s\" [ %llu, %llu ] duration %llu, size %llu, srcKind %s, dstKind %s, correlationId %u\n"
+            fprintf(pFileHandle, "%s \"%s\" [ %llu, %llu ] duration %llu, size %llu, copyCount %llu, srcKind %s, dstKind %s, correlationId %u\n"
                     "\tdeviceId %u, contextId %u, streamId %u, graphId %u, graphNodeId %llu, channelId %u, channelType %s\n",
                     GetActivityKindString(pMemcpyRecord->kind),
                     GetMemcpyKindString((CUpti_ActivityMemcpyKind)pMemcpyRecord->copyKind),
@@ -1030,6 +1040,7 @@ PrintActivity(
                     (unsigned long long)pMemcpyRecord->end,
                     (unsigned long long)(pMemcpyRecord->end - pMemcpyRecord->start),
                     (unsigned long long)pMemcpyRecord->bytes,
+                    (unsigned long long)pMemcpyRecord->copyCount,
                     GetMemoryKindString((CUpti_ActivityMemoryKind)pMemcpyRecord->srcKind),
                     GetMemoryKindString((CUpti_ActivityMemoryKind)pMemcpyRecord->dstKind),
                     pMemcpyRecord->correlationId,
@@ -1845,14 +1856,17 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_CUDA_EVENT:
         {
-            CUpti_ActivityCudaEvent *pCudaEventRecord = (CUpti_ActivityCudaEvent *)pRecord;
+            CUpti_ActivityCudaEvent2 *pCudaEventRecord = (CUpti_ActivityCudaEvent2 *)pRecord;
 
-            fprintf(pFileHandle, "%s contextId %u, streamId %u, correlationId %u, eventId %u\n",
+            fprintf(pFileHandle, "%s [ %llu ] contextId %u, streamId %u, correlationId %u, eventId %u, cudaEventSyncId %llu\n",
                     GetActivityKindString(pCudaEventRecord->kind),
+                    (long long unsigned)pCudaEventRecord->deviceTimestamp,
                     pCudaEventRecord->contextId,
                     pCudaEventRecord->streamId,
                     pCudaEventRecord->correlationId,
-                    pCudaEventRecord->eventId);
+                    pCudaEventRecord->eventId,
+                    (long long unsigned)pCudaEventRecord->cudaEventSyncId);
+
             break;
         }
         case CUPTI_ACTIVITY_KIND_STREAM:
@@ -1870,9 +1884,9 @@ PrintActivity(
         }
         case CUPTI_ACTIVITY_KIND_SYNCHRONIZATION:
         {
-            CUpti_ActivitySynchronization *pSynchronizationRecord = (CUpti_ActivitySynchronization *)pRecord;
+            CUpti_ActivitySynchronization2 *pSynchronizationRecord = (CUpti_ActivitySynchronization2 *)pRecord;
 
-            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, type %s, contextId %u, streamId %d, correlationId %u, eventId %d\n",
+            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, type %s, contextId %u, streamId %d, correlationId %u, eventId %d, cudaEventSyncId %llu\n",
                     GetActivityKindString(pSynchronizationRecord->kind),
                     (unsigned long long)pSynchronizationRecord->start,
                     (unsigned long long)pSynchronizationRecord->end,
@@ -1881,8 +1895,10 @@ PrintActivity(
                     pSynchronizationRecord->contextId,
                     (int32_t)pSynchronizationRecord->streamId,
                     pSynchronizationRecord->correlationId,
-                    (int32_t)pSynchronizationRecord->cudaEventId);
-        break;
+                    (int32_t)pSynchronizationRecord->cudaEventId,
+                    (long long unsigned)pSynchronizationRecord->cudaEventSyncId);
+
+            break;
         }
         case CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION:
         {
@@ -2196,7 +2212,7 @@ PrintActivity(
             fprintf(pFileHandle, "%s [ %llu ] memoryOperationType %s, memoryKind %s, size %llu, address %llu, pc %llu,\n"
                     "  deviceId %u, contextId %u, streamId %u, processId %u, correlationId %u, isAsync %u,\n"
                     "  memoryPool %s, memoryPoolAddress %llu,  memoryPoolThreshold %llu\n"
-                    "source %s\n"
+                    "  source %s\n"
                     ,
                     GetActivityKindString(pMemory2Record->kind),
                     (unsigned long long)pMemory2Record->timestamp,
@@ -2207,9 +2223,9 @@ PrintActivity(
                     (unsigned long long)pMemory2Record->PC,
                     pMemory2Record->deviceId,
                     pMemory2Record->contextId,
+                    pMemory2Record->streamId,
                     pMemory2Record->processId,
                     pMemory2Record->correlationId,
-                    pMemory2Record->streamId,
                     pMemory2Record->isAsync,
                     GetMemoryPoolTypeString(pMemory2Record->memoryPoolConfig.memoryPoolType),
                     (unsigned long long)pMemory2Record->memoryPoolConfig.address,
@@ -2289,6 +2305,27 @@ PrintActivity(
                     (unsigned long long)pJitRecord->jitOperationCorrelationId,
                     (unsigned long long)pJitRecord->cacheSize,
                     GetName(pJitRecord->cachePath));
+
+            break;
+        }
+        case CUPTI_ACTIVITY_KIND_MEM_DECOMPRESS:
+        {
+            CUpti_ActivityMemDecompress *pMemDecompress = (CUpti_ActivityMemDecompress *)pRecord;
+
+            fprintf(pFileHandle, "%s [ %llu, %llu ] duration %llu, deviceId %u, contextId %u, streamId %u, correlationId %u\n"
+                    "channelId %u, channelType %s, numberOfOperations %u, sourceBytes %llu\n",
+                    GetActivityKindString(pMemDecompress->kind),
+                    (unsigned long long)pMemDecompress->start,
+                    (unsigned long long)pMemDecompress->end,
+                    (unsigned long long)(pMemDecompress->end - pMemDecompress->start),
+                    pMemDecompress->deviceId,
+                    pMemDecompress->contextId,
+                    pMemDecompress->streamId,
+                    pMemDecompress->correlationId,
+                    pMemDecompress->channelID,
+                    GetChannelType(pMemDecompress->channelType),
+                    pMemDecompress->numberOfOperations,
+                    (unsigned long long)pMemDecompress->sourceBytes);
 
             break;
         }

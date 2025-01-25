@@ -175,7 +175,7 @@ GraphTraceRecords(
     {
         case CUPTI_ACTIVITY_KIND_MEMCPY:
         {
-            CUpti_ActivityMemcpy5 *pMemcpyRecord = (CUpti_ActivityMemcpy5 *) pRecord;
+            CUpti_ActivityMemcpy6 *pMemcpyRecord = (CUpti_ActivityMemcpy6 *) pRecord;
 
             // Retrieve the information of the API used to create the node.
             NodeIdApiDataMap::iterator it = nodeIdCorrelationMap.find(pMemcpyRecord->graphNodeId);
