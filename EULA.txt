@@ -12,7 +12,7 @@ model and development tools. If you do not agree with the
 terms and conditions of the license agreement, then do not
 download or use the software.
 
-Last updated: January 12, 2024.
+Last updated: January 12, 2025
 
 
 Preface
@@ -876,11 +876,19 @@ cuda_occupancy.h
 
 Component
 
-CUDA Half Precision Headers
+CUDA Floating Point Type Headers 
 
 All
 
-cuda_fp16.h, cuda_fp16.hpp
+cuda_fp16.h, cuda_fp16.hpp, cuda_bf16.h, cuda_bf16.hpp, cuda_fp8.h, cuda_fp8.hpp, cuda_fp6.h, cuda_fp6.hpp, cuda_fp4.h, cuda_fp4.hpp
+
+Component
+
+CUDA Headers for Runtime Compilation
+
+All
+
+crt/host_defines.h, cuComplex.h, cuda_awbarrier_helpers.h, cuda_awbarrier_primitives.h, cuda_awbarrier.h, cuda_pipeline_helpers.h, ccuda_pipeline_primitives.h, ccuda_pipeline.h, cuda_runtime_api.h, cuda.h, cuda/std/tuple, cuda/std/type_traits, cuda/std/type_traits, cuda/std/utility, device_types.h, vector_functions.h, vector_types.h
 
 Component
 

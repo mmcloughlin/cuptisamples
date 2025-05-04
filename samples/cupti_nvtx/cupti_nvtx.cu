@@ -31,6 +31,7 @@
 
 // NVTX headers
 #include "nvtx3/nvToolsExt.h"
+#include "nvtx3/nvToolsExtSync.h"
 #include "nvtx3/nvToolsExtCuda.h"
 #include "nvtx3/nvToolsExtCudaRt.h"
 
