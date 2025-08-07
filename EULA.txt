@@ -1595,14 +1595,14 @@ conditions:
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.  
 
-  20. Licensee's use of linmath.h header for CPU functions for
-    GL vector/matrix operations from lunarG is subject to the
-    Apache License Version 2.0.
+ 20. Licensee's use of linmath.h header for CPU functions for
+     GL vector/matrix operations from lunarG is subject to the
+     Apache License Version 2.0.
 
-  21. The DX12-CUDA sample uses the d3dx12.h header, which is
-    subject to the MIT license.
+ 21. The DX12-CUDA sample uses the d3dx12.h header, which is
+     subject to the MIT license.
 
-  22. Components of the driver and compiler used for binary management, including 
+ 22. Components of the driver and compiler used for binary management, including 
       nvFatBin, nvcc, and cuobjdump, use the Zstandard library which is subject to
       the following license:
 
@@ -1710,4 +1710,3 @@ conditions:
     IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
     SUCH DAMAGE.
 -----------------
-

@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2021 NVIDIA Corporation. All rights reserved
+# Copyright 2025 NVIDIA Corporation. All rights reserved
 #
 ifndef OS
  OS   := $(shell uname)
@@ -8,7 +8,7 @@ endif
 
 CUDA_INSTALL_PATH ?= ../../../..
 NVCC := "$(CUDA_INSTALL_PATH)/bin/nvcc"
-INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I../common
+INCLUDES := -I"$(CUDA_INSTALL_PATH)/include" -I../../include -I ../common -I ../common/nvtx
 
 TARGET_ARCH ?= $(HOST_ARCH)
 TARGET_OS ?= $(shell uname | tr A-Z a-z)
@@ -16,9 +16,11 @@ TARGET_OS ?= $(shell uname | tr A-Z a-z)
 # Set required library paths.
 # In the case of cross-compilation, set the libs to the correct ones under /usr/local/cuda/targets/<TARGET_ARCH>-<TARGET_OS>/lib
 
-ifeq ($(OS),Windows_NT)
+ifeq ($(OS), Windows_NT)
     LIB_PATH ?= ..\..\lib64
+    SET_NVTX_ENV := set NVTX_INJECTION64_PATH=<full_path>/cupti.dll
 else
+    SET_NVTX_ENV := export NVTX_INJECTION64_PATH=<full_path>/libcupti.so
     ifneq ($(TARGET_ARCH), $(HOST_ARCH))
         INCLUDES += -I$(CUDA_INSTALL_PATH)/targets/$(HOST_ARCH)-$(shell uname | tr A-Z a-z)/include
         INCLUDES += -I$(CUDA_INSTALL_PATH)/targets/$(TARGET_ARCH)-$(TARGET_OS)/include
@@ -70,25 +72,31 @@ ifneq ($(TARGET_ARCH), $(HOST_ARCH))
             NVCCFLAGS := --qpp-config $(QPP_CONFIG_VERSION),gcc_ntoaarch64le -lsocket
         endif
     endif
-
     ifdef HOST_COMPILER
         NVCC_COMPILER := -ccbin $(HOST_COMPILER)
     endif
 endif
 
 # Gencode arguments
-SMS ?= 50 52 53 60 61 62 70 72
+SMS ?= 75 80 86 87 89 90 100 103 110 120 121
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
-event_sampling: event_sampling.$(OBJ)
-	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ event_sampling.$(OBJ) $(LIBS) $(INCLUDES)
+cupti_nvtx_ext_payload: cupti_nvtx_ext_payload.$(OBJ) nvtx_payload_attributes.$(OBJ) nvtx_payload_parser.$(OBJ)
+	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) -o $@ $^ $(LIBS) $(INCLUDES)
+	$(info $(SET_NVTX_ENV) and run the application.)
 
-event_sampling.$(OBJ): event_sampling.cu
+cupti_nvtx_ext_payload.$(OBJ): cupti_nvtx_ext_payload.cu
 	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(GENCODE_FLAGS) -c $(INCLUDES) $<
 
-run: event_sampling
+nvtx_payload_attributes.$(OBJ): ../common/nvtx/nvtx_payload_attributes.cpp
+	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(GENCODE_FLAGS) -c $(INCLUDES) $<
+
+nvtx_payload_parser.$(OBJ): ../common/nvtx/nvtx_payload_parser.cpp
+	$(NVCC) $(NVCC_COMPILER) $(NVCCFLAGS) $(GENCODE_FLAGS) -c $(INCLUDES) $<
+
+run: cupti_nvtx_ext_payload
 	./$<
 
 clean:
-	rm -f event_sampling event_sampling.$(OBJ)
+	rm -f cupti_nvtx_ext_payload cupti_nvtx_ext_payload.$(OBJ) nvtx_payload_attributes.$(OBJ) nvtx_payload_parser.$(OBJ)

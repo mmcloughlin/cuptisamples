@@ -76,7 +76,7 @@ ifneq ($(TARGET_ARCH), $(HOST_ARCH))
 endif
 
 # Gencode arguments
-SMS ?= 50 52 53 60 61 62 70 72 75 80 86 87 89 90 100 101 120
+SMS ?= 75 80 86 87 89 90 100 103 110 120 121
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
